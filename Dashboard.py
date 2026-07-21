@@ -124,12 +124,43 @@ if file1 is not None and file2 is not None:
             
             st.markdown("---")
 
-            # --- PREPARE DATA FOR PIE CHARTS ---
-            adj_col = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            growth_col = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            # --- COST SUMMARY TABLE ---
+            st.subheader("💰 Cost Summary")
             
-            cond_adj = adj_col > 0
-            cond_promo = growth_col > 0
+            # Convertimos a numérico y rellenamos nulos con 0 para cálculos seguros
+            adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            annual_salary = pd.to_numeric(df_filtered.get('Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            new_annual_salary = pd.to_numeric(df_filtered.get('New Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+
+            # Sumarizamos solo donde el % sea mayor a 0
+            cost_adj = ((adj_pct / 100) * annual_salary)[adj_pct > 0].sum()
+            cost_promo = ((promo_pct / 100) * annual_salary)[promo_pct > 0].sum()
+            total_cost = cost_adj + cost_promo
+
+            # % de incremento (New Annual Salary / Annual Salary - 1)
+            sum_old = annual_salary.sum()
+            sum_new = new_annual_salary.sum()
+            pct_incremento = ((sum_new / sum_old) - 1) * 100 if sum_old > 0 else 0
+
+            # Creamos la tabla
+            cost_df = pd.DataFrame({
+                "Concept": ["Adjustment", "Growth Promotion", "Total Cost", "Total % Increment"],
+                "Value": [
+                    f"${cost_adj:,.2f}",
+                    f"${cost_promo:,.2f}",
+                    f"${total_cost:,.2f}",
+                    f"{pct_incremento:.2f}%"
+                ]
+            })
+            
+            st.table(cost_df)
+            
+            st.markdown("---")
+
+            # --- PREPARE DATA FOR PIE CHARTS ---
+            cond_adj = adj_pct > 0
+            cond_promo = promo_pct > 0
             
             solo_adj = (cond_adj & ~cond_promo).sum()
             solo_promo = (~cond_adj & cond_promo).sum()
@@ -138,10 +169,6 @@ if file1 is not None and file2 is not None:
             
             num_movimientos = solo_adj + solo_promo + ambos
             total_personas = len(df_filtered)
-
-            # Allow all percentages to display inside the pie chart
-            def my_autopct(pct):
-                return f'{pct:.1f}%' if pct > 0 else ''
 
             # --- CHARTS ---
             st.subheader("📊 Graphical Summary")
@@ -153,23 +180,26 @@ if file1 is not None and file2 is not None:
                 fig1, ax1 = plt.subplots(figsize=(4, 4))
                 if total_personas > 0:
                     if num_movimientos == 0:
-                        ax1.pie([100], labels=['No Movement'], colors=['#d3d3d3'], startangle=90)
+                        ax1.pie([100], colors=['#d3d3d3'], startangle=90)
+                        ax1.legend(["No Movement (100%)"], loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                     else:
                         sizes = [num_movimientos, total_personas - num_movimientos]
                         labels = ['With Movement', 'No Movement']
                         colors = ['#ff9999', '#d3d3d3']
-                        ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                        
+                        # Dibujamos sin texto adentro para evitar encimar
+                        wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
+                        
+                        # Pasamos toda la información a la leyenda
+                        leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
+                        ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                     
                     ax1.axis('equal') 
-                    ax1.set_title('Overall %', fontweight='bold', pad=15)
+                    ax1.set_title('Overall Movement', fontweight='bold', pad=15)
                 else:
                     ax1.text(0.5, 0.5, "No data", ha='center', va='center')
                     
                 st.pyplot(fig1)
-                if pct_mov > 10:
-                    st.warning(f"⚠️ Alert: **{pct_mov:.1f}%** of the selected staff have movements (> 10%).")
-                elif pct_mov > 0:
-                    st.info(f"✅ {pct_mov:.1f}% of the selected staff have movements.")
 
             # --- CHART 2: Breakdown %Adjustment vs %GPromotion ---
             with col2:
@@ -183,11 +213,13 @@ if file1 is not None and file2 is not None:
                 labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
                 colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
                 
-                if len(sizes2) > 0:
-                    wedges, texts, autotexts = ax2.pie(sizes2, autopct=my_autopct, startangle=90, colors=colors2)
+                total_chart2 = sum(sizes2)
+                
+                if total_chart2 > 0:
+                    wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
                     
-                    leyenda2 = [f"{l} ({s})" for l, s in zip(labels2, sizes2)]
-                    ax2.legend(wedges, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                    leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
+                    ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                     
                     ax2.axis('equal')
                     ax2.set_title('Movement Details', fontweight='bold', pad=15)
@@ -207,14 +239,14 @@ if file1 is not None and file2 is not None:
                     df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].replace({'None Selected': 'No Reason Assigned'})
                     
                     reason_counts = df_adj['Adjustment Reason'].value_counts()
+                    total_reasons = reason_counts.sum()
                     
-                    if not reason_counts.empty:
+                    if total_reasons > 0:
                         colores_motivos = sns.color_palette("pastel", len(reason_counts))
                         
-                        wedges3, texts3, autotexts3 = ax3.pie(reason_counts, autopct=my_autopct, 
-                                                              startangle=90, colors=colores_motivos)
+                        wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
                         
-                        leyenda3 = [f"{i} ({v})" for i, v in reason_counts.items()]
+                        leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                         ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
                         ax3.axis('equal')
