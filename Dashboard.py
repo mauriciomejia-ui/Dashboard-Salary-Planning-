@@ -127,30 +127,32 @@ if file1 is not None and file2 is not None:
             # --- COST SUMMARY TABLE ---
             st.subheader("💰 Cost Summary")
             
-            # Convertimos a numérico y rellenamos nulos con 0 para cálculos seguros
+            # 1. Asignación exacta de columnas solicitadas
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            annual_salary = pd.to_numeric(df_filtered.get('Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            new_annual_salary = pd.to_numeric(df_filtered.get('New Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            
+            col_s_annual_salary = pd.to_numeric(df_filtered.get('Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            col_at_new_annual = pd.to_numeric(df_filtered.get('New Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # Sumarizamos solo donde el % sea mayor a 0
-            cost_adj = ((adj_pct / 100) * annual_salary)[adj_pct > 0].sum()
-            cost_promo = ((promo_pct / 100) * annual_salary)[promo_pct > 0].sum()
+            # 2. Cálculos (% / 100) * Columna S, sumarizando SOLO cuando el % es mayor a 0
+            cost_adj = ((adj_pct / 100) * col_s_annual_salary)[adj_pct > 0].sum()
+            cost_promo = ((promo_pct / 100) * col_s_annual_salary)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
 
-            # % de incremento (New Annual Salary / Annual Salary - 1)
-            sum_old = annual_salary.sum()
-            sum_new = new_annual_salary.sum()
-            pct_incremento = ((sum_new / sum_old) - 1) * 100 if sum_old > 0 else 0
+            # 3. Incremento Total en % usando fórmula: Col AT / Col T - 1
+            sum_at = col_at_new_annual.sum()
+            sum_t = col_t_annual_usd.sum()
+            pct_incremento = ((sum_at / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-            # Creamos la tabla
+            # 4. Tabla de Costos
             cost_df = pd.DataFrame({
-                "Concept": ["Adjustment", "Growth Promotion", "Total Cost", "Total % Increment"],
+                "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
                 "Value": [
                     f"${cost_adj:,.2f}",
                     f"${cost_promo:,.2f}",
                     f"${total_cost:,.2f}",
-                    f"{pct_incremento:.2f}%"
+                    f"{pct_incremento:,.2f}%"
                 ]
             })
             
@@ -187,10 +189,7 @@ if file1 is not None and file2 is not None:
                         labels = ['With Movement', 'No Movement']
                         colors = ['#ff9999', '#d3d3d3']
                         
-                        # Dibujamos sin texto adentro para evitar encimar
                         wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
-                        
-                        # Pasamos toda la información a la leyenda
                         leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                         ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                     
@@ -217,7 +216,6 @@ if file1 is not None and file2 is not None:
                 
                 if total_chart2 > 0:
                     wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
-                    
                     leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
                     ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                     
@@ -245,7 +243,6 @@ if file1 is not None and file2 is not None:
                         colores_motivos = sns.color_palette("pastel", len(reason_counts))
                         
                         wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
-                        
                         leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                         ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
