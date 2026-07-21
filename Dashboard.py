@@ -120,7 +120,6 @@ if file1 is not None and file2 is not None:
             st.subheader("👥 Lista de Personal")
             tabla_personal = df_filtered[['Name', 'Global ID', 'Chief Name', 'Position', 'Reporting Organization', 'Function', 'Compensation Area']]
             tabla_personal = tabla_personal.rename(columns={'Chief Name': 'Gerente'})
-            # Se usa width='stretch' para evitar advertencias de Streamlit
             st.dataframe(tabla_personal, width=700) 
             
             st.markdown("---")
@@ -153,11 +152,11 @@ if file1 is not None and file2 is not None:
                 fig1, ax1 = plt.subplots(figsize=(5, 4))
                 if total_personas > 0:
                     if num_movimientos == 0:
-                        ax1.pie([100], labels=['Sin Movimiento'], colors=['#66b3ff'], startangle=90)
+                        ax1.pie([100], labels=['Sin Movimiento'], colors=['#d3d3d3'], startangle=90)
                     else:
                         sizes = [num_movimientos, total_personas - num_movimientos]
                         labels = ['Con Movimiento', 'Sin Movimiento']
-                        colors = ['#ff9999', '#66b3ff']
+                        colors = ['#ff9999', '#d3d3d3']
                         ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
                     
                     ax1.axis('equal') 
@@ -173,7 +172,7 @@ if file1 is not None and file2 is not None:
                 elif pct_mov > 0:
                     st.info(f"✅ El {pct_mov:.1f}% del personal tiene movimientos (dentro del límite).")
 
-            # --- GRÁFICA 2: Desglose del Tipo de Movimiento ---
+            # --- GRÁFICA 2: Desglose %Adjustment vs %GPromotion ---
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
                 
@@ -181,42 +180,65 @@ if file1 is not None and file2 is not None:
                 labels2 = []
                 colors2 = []
                 
+                # Definimos los colores específicos y las etiquetas
                 if solo_adj > 0:
                     sizes2.append(solo_adj)
-                    labels2.append('Solo Ajuste')
-                    colors2.append('#ffb3e6')
+                    labels2.append(f'%Adjustment\n({solo_adj})')
+                    colors2.append('#ffb3e6')  # Rosa
                 if solo_promo > 0:
                     sizes2.append(solo_promo)
-                    labels2.append('Solo Promoción')
-                    colors2.append('#c2c2f0')
+                    labels2.append(f'%GPromotion\n({solo_promo})')
+                    colors2.append('#c2c2f0')  # Morado claro
                 if ambos > 0:
                     sizes2.append(ambos)
-                    labels2.append('Ambos')
-                    colors2.append('#ff6666')
+                    labels2.append(f'Ambos\n({ambos})')
+                    colors2.append('#ff6666')  # Rojo claro
                 if sin_mov > 0:
                     sizes2.append(sin_mov)
-                    labels2.append(f'Ninguno\n({sin_mov} pers.)') # Aquí se añade el conteo exacto de personas
-                    colors2.append('#c2f0c2')
+                    labels2.append(f'No movement\n({sin_mov})') 
+                    colors2.append('#c2f0c2')  # Verde claro
                 
                 if sum(sizes2) > 0:
                     ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90, colors=colors2)
                     ax2.axis('equal')
-                    ax2.set_title('Desglose: Ajuste vs Promo', fontweight='bold')
+                    ax2.set_title('Desglose de Movimientos', fontweight='bold')
                 else:
                     ax2.text(0.5, 0.5, "Sin datos", ha='center', va='center')
                 
                 st.pyplot(fig2)
 
-            # --- GRÁFICA 3: Top 10 Reporting Org ---
+            # --- GRÁFICA 3: Motivos de Ajuste (Adjustment Reason) ---
             with col3:
                 fig3, ax3 = plt.subplots(figsize=(5, 4))
-                # Ajustado para evitar los "Warnings" de PowerShell
-                sns.countplot(y='Reporting Organization', data=df_filtered, 
-                              order=df_filtered['Reporting Organization'].value_counts().index[:10], 
-                              hue='Reporting Organization', legend=False, palette='viridis', ax=ax3)
-                ax3.set_xlabel('Cantidad')
-                ax3.set_ylabel('')
-                ax3.set_title('Top 10 Reporting Org')
+                
+                # Filtramos solo a los que tienen un Adjustment Reason asignado
+                if 'Adjustment Reason' in df_filtered.columns:
+                    # Traemos a las personas que tienen algún texto en la razón de ajuste
+                    df_reasons = df_filtered.dropna(subset=['Adjustment Reason'])
+                    # Si quieres asegurarte de que solo sean los que tienen %Adjustment > 0 usa esta línea en lugar de la anterior:
+                    # df_reasons = df_filtered[(cond_adj) & (df_filtered['Adjustment Reason'].notna())]
+                    
+                    reason_counts = df_reasons['Adjustment Reason'].value_counts()
+                    
+                    if not reason_counts.empty:
+                        # Función matemática para mostrar el % y el conteo exacto al mismo tiempo
+                        def func(pct, allvals):
+                            absolute = int(round(pct/100.*sum(allvals)))
+                            return f"{pct:.1f}%\n({absolute})"
+                        
+                        # Generamos los colores automáticamente según la cantidad de motivos
+                        colores_motivos = sns.color_palette("pastel", len(reason_counts))
+                        
+                        ax3.pie(reason_counts, labels=reason_counts.index, 
+                                autopct=lambda pct: func(pct, reason_counts), 
+                                startangle=90, colors=colores_motivos)
+                        ax3.axis('equal')
+                        ax3.set_title('Split por Adjustment Reason', fontweight='bold')
+                    else:
+                        ax3.text(0.5, 0.5, "Sin motivos de ajuste registrados", ha='center', va='center')
+                else:
+                    ax3.text(0.5, 0.5, "Columna no encontrada", ha='center', va='center')
+                
                 st.pyplot(fig3)
                 
     except Exception as e:
