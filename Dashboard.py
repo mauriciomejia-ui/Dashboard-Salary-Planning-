@@ -131,21 +131,28 @@ if file1 is not None and file2 is not None:
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             
-            # Usaremos Columna T (USD) para ambos cálculos como indicaste
+            # Usaremos Columna T (USD) para los cálculos
             col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # 2. Cálculos exactos: (% / 100) * Columna T (USD), sumarizando SOLO cuando el % es mayor a 0
+            # 2. Cálculos de Costos: (% / 100) * Columna T (USD), sumarizando SOLO cuando el % es mayor a 0
             cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
             cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
 
-            # 3. Incremento Total en % (Col AU / Col T - 1)
-            sum_au = col_au_new_annual_usd.sum()
+            # 3. Sumas totales para calcular porcentajes
             sum_t = col_t_annual_usd.sum()
+            sum_au = col_au_new_annual_usd.sum()
+            
+            # 4. Cálculo de los % sobre el total del salario (Columna T)
+            pct_adj_vs_total = (cost_adj / sum_t) * 100 if sum_t > 0 else 0
+            pct_promo_vs_total = (cost_promo / sum_t) * 100 if sum_t > 0 else 0
+            pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
+            
+            # % Incremento Total (Col AU / Col T - 1)
             pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-            # 4. Construcción de Tabla
+            # 5. Construcción de Tabla con la nueva columna
             cost_df = pd.DataFrame({
                 "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
                 "Value": [
@@ -153,6 +160,12 @@ if file1 is not None and file2 is not None:
                     f"${cost_promo:,.2f}",
                     f"${total_cost:,.2f}",
                     f"{pct_incremento:,.2f}%"
+                ],
+                "% of Total Salary": [
+                    f"{pct_adj_vs_total:,.2f}%",
+                    f"{pct_promo_vs_total:,.2f}%",
+                    f"{pct_total_cost_vs_total:,.2f}%",
+                    "-"  # Se deja un guión para no ser redundante con la columna de Valor
                 ]
             })
             
