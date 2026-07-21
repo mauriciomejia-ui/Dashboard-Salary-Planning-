@@ -127,25 +127,25 @@ if file1 is not None and file2 is not None:
             # --- COST SUMMARY TABLE ---
             st.subheader("💰 Cost Summary")
             
-            # 1. Asignación exacta de columnas solicitadas
+            # 1. Obtenemos las variables base
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             
-            col_s_annual_salary = pd.to_numeric(df_filtered.get('Annual Salary', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            # Usaremos Columna T (USD) para ambos cálculos como indicaste
             col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # 2. Cálculos (% / 100) * Columna S, sumarizando SOLO cuando el % es mayor a 0
-            cost_adj = ((adj_pct / 100) * col_s_annual_salary)[adj_pct > 0].sum()
-            cost_promo = ((promo_pct / 100) * col_s_annual_salary)[promo_pct > 0].sum()
+            # 2. Cálculos exactos: (% / 100) * Columna T (USD), sumarizando SOLO cuando el % es mayor a 0
+            cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
+            cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
 
-            # 3. Incremento Total en % usando comparación USD (Col AU / Col T - 1)
+            # 3. Incremento Total en % (Col AU / Col T - 1)
             sum_au = col_au_new_annual_usd.sum()
             sum_t = col_t_annual_usd.sum()
             pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-            # 4. Tabla de Costos
+            # 4. Construcción de Tabla
             cost_df = pd.DataFrame({
                 "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
                 "Value": [
