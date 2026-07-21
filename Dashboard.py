@@ -131,7 +131,6 @@ if file1 is not None and file2 is not None:
             cond_adj = adj_col > 0
             cond_promo = growth_col > 0
             
-            # Cantidades exactas para el desglose
             solo_adj = (cond_adj & ~cond_promo).sum()
             solo_promo = (~cond_adj & cond_promo).sum()
             ambos = (cond_adj & cond_promo).sum()
@@ -140,16 +139,18 @@ if file1 is not None and file2 is not None:
             num_movimientos = solo_adj + solo_promo + ambos
             total_personas = len(df_filtered)
 
+            # Función para evitar que porcentajes pequeños se encimen
+            def my_autopct(pct):
+                return f'{pct:.1f}%' if pct > 3 else ''
+
             # --- GRÁFICAS ---
             st.subheader("📊 Resumen Gráfico")
-            
             col1, col2, col3 = st.columns(3)
             
-            # --- GRÁFICA 1: Porcentaje General de Movimientos ---
+            # --- GRÁFICA 1: Porcentaje General ---
             with col1:
                 pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
-                
-                fig1, ax1 = plt.subplots(figsize=(5, 4))
+                fig1, ax1 = plt.subplots(figsize=(4, 4))
                 if total_personas > 0:
                     if num_movimientos == 0:
                         ax1.pie([100], labels=['Sin Movimiento'], colors=['#d3d3d3'], startangle=90)
@@ -160,48 +161,38 @@ if file1 is not None and file2 is not None:
                         ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
                     
                     ax1.axis('equal') 
-                    ax1.set_title('% General de Movimientos', fontweight='bold')
+                    ax1.set_title('% General', fontweight='bold', pad=15)
                 else:
                     ax1.text(0.5, 0.5, "Sin datos", ha='center', va='center')
                     
                 st.pyplot(fig1)
-                
-                # Alerta condicional
                 if pct_mov > 10:
-                    st.warning(f"⚠️ Alerta: El **{pct_mov:.1f}%** del personal seleccionado tiene movimientos (supera el 10%).")
+                    st.warning(f"⚠️ Alerta: **{pct_mov:.1f}%** del personal supera el 10%.")
                 elif pct_mov > 0:
-                    st.info(f"✅ El {pct_mov:.1f}% del personal tiene movimientos (dentro del límite).")
+                    st.info(f"✅ {pct_mov:.1f}% tiene movimientos.")
 
             # --- GRÁFICA 2: Desglose %Adjustment vs %GPromotion ---
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
                 
-                sizes2 = []
-                labels2 = []
-                colors2 = []
+                raw_sizes2 = [solo_adj, solo_promo, ambos, sin_mov]
+                raw_labels2 = ['Solo Ajuste', 'Solo Promoción', 'Ambos', 'Sin Movimiento']
+                raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
                 
-                # Definimos los colores específicos y las etiquetas
-                if solo_adj > 0:
-                    sizes2.append(solo_adj)
-                    labels2.append(f'%Adjustment\n({solo_adj})')
-                    colors2.append('#ffb3e6')  # Rosa
-                if solo_promo > 0:
-                    sizes2.append(solo_promo)
-                    labels2.append(f'%GPromotion\n({solo_promo})')
-                    colors2.append('#c2c2f0')  # Morado claro
-                if ambos > 0:
-                    sizes2.append(ambos)
-                    labels2.append(f'Ambos\n({ambos})')
-                    colors2.append('#ff6666')  # Rojo claro
-                if sin_mov > 0:
-                    sizes2.append(sin_mov)
-                    labels2.append(f'No movement\n({sin_mov})') 
-                    colors2.append('#c2f0c2')  # Verde claro
+                # Filtramos para que no dibuje ceros
+                sizes2 = [s for s in raw_sizes2 if s > 0]
+                labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
+                colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
                 
-                if sum(sizes2) > 0:
-                    ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90, colors=colors2)
+                if len(sizes2) > 0:
+                    wedges, texts, autotexts = ax2.pie(sizes2, autopct=my_autopct, startangle=90, colors=colors2)
+                    
+                    # Agregamos la leyenda externa para evitar texto encimado
+                    leyenda2 = [f"{l} ({s})" for l, s in zip(labels2, sizes2)]
+                    ax2.legend(wedges, leyenda2, title="Desglose", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                    
                     ax2.axis('equal')
-                    ax2.set_title('Desglose de Movimientos', fontweight='bold')
+                    ax2.set_title('Detalle de Movimientos', fontweight='bold', pad=15)
                 else:
                     ax2.text(0.5, 0.5, "Sin datos", ha='center', va='center')
                 
@@ -211,33 +202,32 @@ if file1 is not None and file2 is not None:
             with col3:
                 fig3, ax3 = plt.subplots(figsize=(5, 4))
                 
-                # Filtramos solo a los que tienen un Adjustment Reason asignado
-                if 'Adjustment Reason' in df_filtered.columns:
-                    # Traemos a las personas que tienen algún texto en la razón de ajuste
-                    df_reasons = df_filtered.dropna(subset=['Adjustment Reason'])
-                    # Si quieres asegurarte de que solo sean los que tienen %Adjustment > 0 usa esta línea en lugar de la anterior:
-                    # df_reasons = df_filtered[(cond_adj) & (df_filtered['Adjustment Reason'].notna())]
+                # Tomamos SOLO a las personas que realmente tuvieron un ajuste (>0)
+                df_adj = df_filtered[cond_adj].copy()
+                
+                if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
+                    # Limpiamos los vacíos y "None Selected" para que no se pierdan en la suma
+                    df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('Sin Razón Asignada')
+                    df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].replace({'None Selected': 'Sin Razón Asignada'})
                     
-                    reason_counts = df_reasons['Adjustment Reason'].value_counts()
+                    reason_counts = df_adj['Adjustment Reason'].value_counts()
                     
                     if not reason_counts.empty:
-                        # Función matemática para mostrar el % y el conteo exacto al mismo tiempo
-                        def func(pct, allvals):
-                            absolute = int(round(pct/100.*sum(allvals)))
-                            return f"{pct:.1f}%\n({absolute})"
-                        
-                        # Generamos los colores automáticamente según la cantidad de motivos
                         colores_motivos = sns.color_palette("pastel", len(reason_counts))
                         
-                        ax3.pie(reason_counts, labels=reason_counts.index, 
-                                autopct=lambda pct: func(pct, reason_counts), 
-                                startangle=90, colors=colores_motivos)
+                        wedges3, texts3, autotexts3 = ax3.pie(reason_counts, autopct=my_autopct, 
+                                                              startangle=90, colors=colores_motivos)
+                        
+                        # Creamos la leyenda externa con el motivo y la cantidad exacta de casos
+                        leyenda3 = [f"{i} ({v})" for i, v in reason_counts.items()]
+                        ax3.legend(wedges3, leyenda3, title="Motivos", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                        
                         ax3.axis('equal')
-                        ax3.set_title('Split por Adjustment Reason', fontweight='bold')
+                        ax3.set_title('Split de Ajustes (Reason)', fontweight='bold', pad=15)
                     else:
-                        ax3.text(0.5, 0.5, "Sin motivos de ajuste registrados", ha='center', va='center')
+                        ax3.text(0.5, 0.5, "Sin datos válidos", ha='center', va='center')
                 else:
-                    ax3.text(0.5, 0.5, "Columna no encontrada", ha='center', va='center')
+                    ax3.text(0.5, 0.5, "Sin ajustes para analizar", ha='center', va='center')
                 
                 st.pyplot(fig3)
                 
