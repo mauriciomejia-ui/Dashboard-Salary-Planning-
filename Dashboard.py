@@ -45,7 +45,6 @@ if file1 is not None and file2 is not None:
         nombres_disponibles = ["-- Ninguno --"] + list(st.session_state['memoria_filtros'].keys())
         filtro_elegido = st.sidebar.selectbox("Cargar una configuración:", nombres_disponibles)
         
-        # Preparar los valores predeterminados según el filtro cargado
         def_gerentes, def_orgs, def_funcs, def_comps = [], [], [], []
         if filtro_elegido != "-- Ninguno --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
@@ -65,7 +64,6 @@ if file1 is not None and file2 is not None:
         func_options = sorted(df['Function'].dropna().unique().tolist())
         comp_options = sorted(df['Compensation Area'].dropna().unique().tolist())
 
-        # Validar que las opciones guardadas sigan existiendo en los archivos actuales
         def_gerentes = [x for x in def_gerentes if x in gerente_options]
         def_orgs = [x for x in def_orgs if x in org_options]
         def_funcs = [x for x in def_funcs if x in func_options]
@@ -79,27 +77,29 @@ if file1 is not None and file2 is not None:
         # --- MENÚ LATERAL: GUARDAR NUEVO FILTRO ---
         st.sidebar.markdown("---")
         st.sidebar.subheader("✏️ Guardar combinación actual")
-        nuevo_nombre = st.sidebar.text_input("Dale un título a este filtro (Ej. 'Equipo Ventas Norte'):")
+        nuevo_nombre = st.sidebar.text_input("Dale un título a este filtro:")
         
         if st.sidebar.button("Guardar Filtro"):
             if nuevo_nombre:
-                # Guardar en la memoria temporal
                 st.session_state['memoria_filtros'][nuevo_nombre] = {
                     "gerentes": selected_gerentes,
                     "orgs": selected_orgs,
                     "funcs": selected_funcs,
                     "comps": selected_comps
                 }
-                # Guardar en el disco duro (archivo .json)
                 with open(ARCHIVO_FILTROS, 'w', encoding='utf-8') as f:
                     json.dump(st.session_state['memoria_filtros'], f)
-                    
-                st.sidebar.success(f"¡Filtro '{nuevo_nombre}' guardado con éxito!")
-                st.rerun() # Refresca la app para mostrar el nuevo filtro arriba
+                st.sidebar.success(f"¡Filtro '{nuevo_nombre}' guardado!")
+                
+                # Recargar a prueba de errores de versión
+                if hasattr(st, "rerun"):
+                    st.rerun()
+                elif hasattr(st, "experimental_rerun"):
+                    st.experimental_rerun()
             else:
-                st.sidebar.warning("Por favor, escribe un título antes de guardar.")
+                st.sidebar.warning("Escribe un título antes de guardar.")
 
-        # --- APLICAR FILTROS A LOS DATOS ---
+        # --- APLICAR FILTROS ---
         filtros_finales_gerentes = selected_gerentes if selected_gerentes else gerente_options
         filtros_finales_orgs = selected_orgs if selected_orgs else org_options
         filtros_finales_funcs = selected_funcs if selected_funcs else func_options
@@ -127,30 +127,62 @@ if file1 is not None and file2 is not None:
 
             # --- GRÁFICAS ---
             st.subheader("📊 Resumen Gráfico")
+            
             col1, col2, col3 = st.columns(3)
             
+            # --- GRÁFICA 1: Porcentaje de Movimientos ---
             with col1:
+                # OJO: Cambié '% adjustment' a '%Adjustment' (sin espacio) que es como viene en tu Excel
+                adj_col = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+                growth_col = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+                
+                # Condición: Ajuste > 0 O Crecimiento > 0
+                movimientos_mask = (adj_col > 0) | (growth_col > 0)
+                num_movimientos = movimientos_mask.sum()
+                total_personas = len(df_filtered)
+                
+                pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
+                
                 fig1, ax1 = plt.subplots(figsize=(5, 4))
-                sns.countplot(y='Reporting Organization', data=df_filtered, order=df_filtered['Reporting Organization'].value_counts().index[:10], palette='viridis', ax=ax1)
-                ax1.set_xlabel('Cantidad')
-                ax1.set_ylabel('')
-                ax1.set_title('Top 10 Reporting Org')
+                if total_personas > 0:
+                    labels = ['Con Movimiento', 'Sin Movimiento']
+                    sizes = [num_movimientos, total_personas - num_movimientos]
+                    colors = ['#ff9999', '#66b3ff']
+                    
+                    # Evitar graficar pastel si no hay movimientos para que no marque error visual
+                    if num_movimientos == 0:
+                        ax1.pie([100], labels=['Sin Movimiento'], colors=['#66b3ff'], startangle=90)
+                    else:
+                        ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                    
+                    ax1.axis('equal') 
+                    ax1.set_title('% de Empleados con Ajuste/Promo', fontweight='bold')
+                else:
+                    ax1.text(0.5, 0.5, "Sin datos", ha='center', va='center')
+                    
                 st.pyplot(fig1)
+                
+                if pct_mov > 10:
+                    st.warning(f"⚠️ Alerta: El **{pct_mov:.1f}%** del personal seleccionado tiene movimientos (supera el límite del 10%).")
+                elif pct_mov > 0:
+                    st.info(f"✅ El {pct_mov:.1f}% del personal tiene movimientos (dentro de los límites).")
 
+            # --- GRÁFICA 2: Top 10 Reporting Org ---
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
-                sns.countplot(y='Function', data=df_filtered, order=df_filtered['Function'].value_counts().index[:10], palette='viridis', ax=ax2)
+                sns.countplot(y='Reporting Organization', data=df_filtered, order=df_filtered['Reporting Organization'].value_counts().index[:10], palette='viridis', ax=ax2)
                 ax2.set_xlabel('Cantidad')
                 ax2.set_ylabel('')
-                ax2.set_title('Top 10 Functions')
+                ax2.set_title('Top 10 Reporting Org')
                 st.pyplot(fig2)
 
+            # --- GRÁFICA 3: Top 10 Functions ---
             with col3:
                 fig3, ax3 = plt.subplots(figsize=(5, 4))
-                sns.countplot(y='Compensation Area', data=df_filtered, order=df_filtered['Compensation Area'].value_counts().index[:10], palette='viridis', ax=ax3)
+                sns.countplot(y='Function', data=df_filtered, order=df_filtered['Function'].value_counts().index[:10], palette='viridis', ax=ax3)
                 ax3.set_xlabel('Cantidad')
                 ax3.set_ylabel('')
-                ax3.set_title('Compensation Areas')
+                ax3.set_title('Top 10 Functions')
                 st.pyplot(fig3)
                 
     except Exception as e:
