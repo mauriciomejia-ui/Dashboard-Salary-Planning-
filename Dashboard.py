@@ -91,7 +91,6 @@ if file1 is not None and file2 is not None:
                     json.dump(st.session_state['memoria_filtros'], f)
                 st.sidebar.success(f"¡Filtro '{nuevo_nombre}' guardado!")
                 
-                # Recargar a prueba de errores de versión
                 if hasattr(st, "rerun"):
                     st.rerun()
                 elif hasattr(st, "experimental_rerun"):
@@ -121,68 +120,103 @@ if file1 is not None and file2 is not None:
             st.subheader("👥 Lista de Personal")
             tabla_personal = df_filtered[['Name', 'Global ID', 'Chief Name', 'Position', 'Reporting Organization', 'Function', 'Compensation Area']]
             tabla_personal = tabla_personal.rename(columns={'Chief Name': 'Gerente'})
-            st.dataframe(tabla_personal, use_container_width=True)
+            # Se usa width='stretch' para evitar advertencias de Streamlit
+            st.dataframe(tabla_personal, width=700) 
             
             st.markdown("---")
+
+            # --- PREPARAR DATOS PARA GRÁFICAS DE PASTEL ---
+            adj_col = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            growth_col = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            
+            cond_adj = adj_col > 0
+            cond_promo = growth_col > 0
+            
+            # Cantidades exactas para el desglose
+            solo_adj = (cond_adj & ~cond_promo).sum()
+            solo_promo = (~cond_adj & cond_promo).sum()
+            ambos = (cond_adj & cond_promo).sum()
+            sin_mov = (~cond_adj & ~cond_promo).sum()
+            
+            num_movimientos = solo_adj + solo_promo + ambos
+            total_personas = len(df_filtered)
 
             # --- GRÁFICAS ---
             st.subheader("📊 Resumen Gráfico")
             
             col1, col2, col3 = st.columns(3)
             
-            # --- GRÁFICA 1: Porcentaje de Movimientos ---
+            # --- GRÁFICA 1: Porcentaje General de Movimientos ---
             with col1:
-                # OJO: Cambié '% adjustment' a '%Adjustment' (sin espacio) que es como viene en tu Excel
-                adj_col = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-                growth_col = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-                
-                # Condición: Ajuste > 0 O Crecimiento > 0
-                movimientos_mask = (adj_col > 0) | (growth_col > 0)
-                num_movimientos = movimientos_mask.sum()
-                total_personas = len(df_filtered)
-                
                 pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
                 
                 fig1, ax1 = plt.subplots(figsize=(5, 4))
                 if total_personas > 0:
-                    labels = ['Con Movimiento', 'Sin Movimiento']
-                    sizes = [num_movimientos, total_personas - num_movimientos]
-                    colors = ['#ff9999', '#66b3ff']
-                    
-                    # Evitar graficar pastel si no hay movimientos para que no marque error visual
                     if num_movimientos == 0:
                         ax1.pie([100], labels=['Sin Movimiento'], colors=['#66b3ff'], startangle=90)
                     else:
+                        sizes = [num_movimientos, total_personas - num_movimientos]
+                        labels = ['Con Movimiento', 'Sin Movimiento']
+                        colors = ['#ff9999', '#66b3ff']
                         ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
                     
                     ax1.axis('equal') 
-                    ax1.set_title('% de Empleados con Ajuste/Promo', fontweight='bold')
+                    ax1.set_title('% General de Movimientos', fontweight='bold')
                 else:
                     ax1.text(0.5, 0.5, "Sin datos", ha='center', va='center')
                     
                 st.pyplot(fig1)
                 
+                # Alerta condicional
                 if pct_mov > 10:
-                    st.warning(f"⚠️ Alerta: El **{pct_mov:.1f}%** del personal seleccionado tiene movimientos (supera el límite del 10%).")
+                    st.warning(f"⚠️ Alerta: El **{pct_mov:.1f}%** del personal seleccionado tiene movimientos (supera el 10%).")
                 elif pct_mov > 0:
-                    st.info(f"✅ El {pct_mov:.1f}% del personal tiene movimientos (dentro de los límites).")
+                    st.info(f"✅ El {pct_mov:.1f}% del personal tiene movimientos (dentro del límite).")
 
-            # --- GRÁFICA 2: Top 10 Reporting Org ---
+            # --- GRÁFICA 2: Desglose del Tipo de Movimiento ---
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
-                sns.countplot(y='Reporting Organization', data=df_filtered, order=df_filtered['Reporting Organization'].value_counts().index[:10], palette='viridis', ax=ax2)
-                ax2.set_xlabel('Cantidad')
-                ax2.set_ylabel('')
-                ax2.set_title('Top 10 Reporting Org')
+                
+                sizes2 = []
+                labels2 = []
+                colors2 = []
+                
+                if solo_adj > 0:
+                    sizes2.append(solo_adj)
+                    labels2.append('Solo Ajuste')
+                    colors2.append('#ffb3e6')
+                if solo_promo > 0:
+                    sizes2.append(solo_promo)
+                    labels2.append('Solo Promoción')
+                    colors2.append('#c2c2f0')
+                if ambos > 0:
+                    sizes2.append(ambos)
+                    labels2.append('Ambos')
+                    colors2.append('#ff6666')
+                if sin_mov > 0:
+                    sizes2.append(sin_mov)
+                    labels2.append(f'Ninguno\n({sin_mov} pers.)') # Aquí se añade el conteo exacto de personas
+                    colors2.append('#c2f0c2')
+                
+                if sum(sizes2) > 0:
+                    ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90, colors=colors2)
+                    ax2.axis('equal')
+                    ax2.set_title('Desglose: Ajuste vs Promo', fontweight='bold')
+                else:
+                    ax2.text(0.5, 0.5, "Sin datos", ha='center', va='center')
+                
                 st.pyplot(fig2)
 
-            # --- GRÁFICA 3: Top 10 Functions ---
+            # --- GRÁFICA 3: Top 10 Reporting Org ---
             with col3:
                 fig3, ax3 = plt.subplots(figsize=(5, 4))
-                sns.countplot(y='Function', data=df_filtered, order=df_filtered['Function'].value_counts().index[:10], palette='viridis', ax=ax3)
+                # Ajustado para evitar los "Warnings" de PowerShell
+                sns.countplot(y='Reporting Organization', data=df_filtered, 
+                              order=df_filtered['Reporting Organization'].value_counts().index[:10], 
+                              hue='Reporting Organization', legend=False, palette='viridis', ax=ax3)
                 ax3.set_xlabel('Cantidad')
                 ax3.set_ylabel('')
-                ax3.set_title('Top 10 Functions')
+                ax3.set_title('Top 10 Reporting Org')
                 st.pyplot(fig3)
                 
     except Exception as e:
