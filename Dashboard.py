@@ -34,24 +34,34 @@ if file1 is not None and file2 is not None:
         df1 = pd.read_excel(file1, sheet_name="Salary")
         df2 = pd.read_excel(file2, header=2)
         
+        # Format Global ID to merge correctly
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
-        df = pd.merge(df1, df2[['Global ID', 'Chief Name']], on='Global ID', how='left')
+        # Extraer columna AC (índice 28) del SuperFlex como Employee Subgroup
+        if len(df2.columns) > 28:
+            df2['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
+        else:
+            df2['Employee Subgroup'] = "N/A"
+        
+        # Merge Main File with SuperFlex data
+        df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup']], on='Global ID', how='left')
         df['Chief Name'] = df['Chief Name'].fillna("No Manager Assigned")
+        df['Employee Subgroup'] = df['Employee Subgroup'].replace('nan', 'Unknown').fillna('Unknown')
         
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
         nombres_disponibles = ["-- None --"] + list(st.session_state['memoria_filtros'].keys())
         filtro_elegido = st.sidebar.selectbox("Load a configuration:", nombres_disponibles)
         
-        def_gerentes, def_orgs, def_funcs, def_comps = [], [], [], []
+        def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups = [], [], [], [], []
         if filtro_elegido != "-- None --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
             def_gerentes = config.get("gerentes", [])
             def_orgs = config.get("orgs", [])
             def_funcs = config.get("funcs", [])
             def_comps = config.get("comps", [])
+            def_subgroups = config.get("subgroups", [])
 
         st.sidebar.markdown("---")
         
@@ -63,16 +73,19 @@ if file1 is not None and file2 is not None:
         org_options = sorted(df['Reporting Organization'].dropna().unique().tolist())
         func_options = sorted(df['Function'].dropna().unique().tolist())
         comp_options = sorted(df['Compensation Area'].dropna().unique().tolist())
+        subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
 
         def_gerentes = [x for x in def_gerentes if x in gerente_options]
         def_orgs = [x for x in def_orgs if x in org_options]
         def_funcs = [x for x in def_funcs if x in func_options]
         def_comps = [x for x in def_comps if x in comp_options]
+        def_subgroups = [x for x in def_subgroups if x in subgroup_options]
 
         selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
         selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
         selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
         selected_comps = st.sidebar.multiselect("Compensation Area:", comp_options, default=def_comps)
+        selected_subgroups = st.sidebar.multiselect("Employee Subgroup:", subgroup_options, default=def_subgroups)
         
         # --- SIDEBAR: SAVE NEW FILTER ---
         st.sidebar.markdown("---")
@@ -85,7 +98,8 @@ if file1 is not None and file2 is not None:
                     "gerentes": selected_gerentes,
                     "orgs": selected_orgs,
                     "funcs": selected_funcs,
-                    "comps": selected_comps
+                    "comps": selected_comps,
+                    "subgroups": selected_subgroups
                 }
                 with open(ARCHIVO_FILTROS, 'w', encoding='utf-8') as f:
                     json.dump(st.session_state['memoria_filtros'], f)
@@ -103,12 +117,14 @@ if file1 is not None and file2 is not None:
         filtros_finales_orgs = selected_orgs if selected_orgs else org_options
         filtros_finales_funcs = selected_funcs if selected_funcs else func_options
         filtros_finales_comps = selected_comps if selected_comps else comp_options
+        filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
 
         df_filtered = df[
             (df['Chief Name'].isin(filtros_finales_gerentes)) &
             (df['Reporting Organization'].isin(filtros_finales_orgs)) &
             (df['Function'].isin(filtros_finales_funcs)) &
-            (df['Compensation Area'].isin(filtros_finales_comps))
+            (df['Compensation Area'].isin(filtros_finales_comps)) &
+            (df['Employee Subgroup'].isin(filtros_finales_subgroups))
         ]
         
         st.success(f"Showing {len(df_filtered)} records matching your search.")
@@ -118,7 +134,7 @@ if file1 is not None and file2 is not None:
         else:
             # --- STAFF TABLE ---
             st.subheader("👥 Employee List")
-            tabla_personal = df_filtered[['Name', 'Global ID', 'Chief Name', 'Position', 'Reporting Organization', 'Function', 'Compensation Area']]
+            tabla_personal = df_filtered[['Name', 'Global ID', 'Chief Name', 'Employee Subgroup', 'Position', 'Reporting Organization', 'Function', 'Compensation Area']]
             tabla_personal = tabla_personal.rename(columns={'Chief Name': 'Manager'})
             st.dataframe(tabla_personal, width=700) 
             
@@ -165,7 +181,7 @@ if file1 is not None and file2 is not None:
                     f"{pct_adj_vs_total:,.2f}%",
                     f"{pct_promo_vs_total:,.2f}%",
                     f"{pct_total_cost_vs_total:,.2f}%",
-                    "-"  # Se deja un guión para no ser redundante con la columna de Valor
+                    "-"
                 ]
             })
             
