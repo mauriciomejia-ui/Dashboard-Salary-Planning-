@@ -127,48 +127,35 @@ if file1 is not None and file2 is not None:
             (df['Employee Subgroup'].isin(filtros_finales_subgroups))
         ]
         
-        st.success(f"Showing {len(df_filtered)} records matching your search.")
+        st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
         
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
-            # --- STAFF TABLE ---
-            st.subheader("👥 Employee List")
-            tabla_personal = df_filtered[['Name', 'Global ID', 'Chief Name', 'Employee Subgroup', 'Position', 'Reporting Organization', 'Function', 'Compensation Area']]
-            tabla_personal = tabla_personal.rename(columns={'Chief Name': 'Manager'})
-            st.dataframe(tabla_personal, width=700) 
-            
-            st.markdown("---")
-
             # --- COST SUMMARY TABLE ---
             st.subheader("💰 Cost Summary")
             
-            # 1. Obtenemos las variables base
+            # Obtenemos las variables base
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             
-            # Usaremos Columna T (USD) para los cálculos
             col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # 2. Cálculos de Costos: (% / 100) * Columna T (USD), sumarizando SOLO cuando el % es mayor a 0
+            # Cálculos de Costos
             cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
             cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
 
-            # 3. Sumas totales para calcular porcentajes
             sum_t = col_t_annual_usd.sum()
             sum_au = col_au_new_annual_usd.sum()
             
-            # 4. Cálculo de los % sobre el total del salario (Columna T)
             pct_adj_vs_total = (cost_adj / sum_t) * 100 if sum_t > 0 else 0
             pct_promo_vs_total = (cost_promo / sum_t) * 100 if sum_t > 0 else 0
             pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
             
-            # % Incremento Total (Col AU / Col T - 1)
             pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-            # 5. Construcción de Tabla con la nueva columna
             cost_df = pd.DataFrame({
                 "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
                 "Value": [
@@ -186,19 +173,23 @@ if file1 is not None and file2 is not None:
             })
             
             st.table(cost_df)
-            
             st.markdown("---")
 
             # --- PREPARE DATA FOR PIE CHARTS ---
             cond_adj = adj_pct > 0
             cond_promo = promo_pct > 0
             
-            solo_adj = (cond_adj & ~cond_promo).sum()
-            solo_promo = (~cond_adj & cond_promo).sum()
-            ambos = (cond_adj & cond_promo).sum()
-            sin_mov = (~cond_adj & ~cond_promo).sum()
+            solo_adj = (cond_adj & ~cond_promo)
+            solo_promo = (~cond_adj & cond_promo)
+            ambos = (cond_adj & cond_promo)
+            sin_mov = (~cond_adj & ~cond_promo)
             
-            num_movimientos = solo_adj + solo_promo + ambos
+            num_solo_adj = solo_adj.sum()
+            num_solo_promo = solo_promo.sum()
+            num_ambos = ambos.sum()
+            num_sin_mov = sin_mov.sum()
+            
+            num_movimientos = num_solo_adj + num_solo_promo + num_ambos
             total_personas = len(df_filtered)
 
             # --- CHARTS ---
@@ -233,7 +224,7 @@ if file1 is not None and file2 is not None:
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
                 
-                raw_sizes2 = [solo_adj, solo_promo, ambos, sin_mov]
+                raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                 raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
                 raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
                 
@@ -283,6 +274,39 @@ if file1 is not None and file2 is not None:
                     ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
                 
                 st.pyplot(fig3)
+
+            st.markdown("---")
+
+            # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
+            st.subheader("👥 Employee Detailed List")
+            st.info("💡 Tip: Select a movement category below to see the full information of those specific employees.")
+            
+            # Selector for the detail table
+            opcion_detalle = st.radio(
+                "Filter list by movement type (Chart 2 categories):",
+                ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
+                horizontal=True
+            )
+            
+            # Apply corresponding mask
+            if opcion_detalle == "Adjustment Only":
+                mask = solo_adj
+            elif opcion_detalle == "Promotion Only":
+                mask = solo_promo
+            elif opcion_detalle == "Both":
+                mask = ambos
+            elif opcion_detalle == "No Movement":
+                mask = sin_mov
+            else:
+                mask = pd.Series(True, index=df_filtered.index)
+                
+            df_detalle = df_filtered[mask]
+            
+            # Renombrar para mayor limpieza (opcional) pero manteniendo todas las columnas
+            df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
+            
+            st.write(f"Showing **{len(df_detalle)}** employees for: **{opcion_detalle}**")
+            st.dataframe(df_detalle, use_container_width=True)
                 
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
