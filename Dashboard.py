@@ -192,14 +192,16 @@ if file1 is not None and file2 is not None:
             num_movimientos = num_solo_adj + num_solo_promo + num_ambos
             total_personas = len(df_filtered)
 
-            # --- CHARTS ---
+            # --- CHARTS (2x2 GRID FOR LARGER DISPLAY) ---
             st.subheader("📊 Graphical Summary")
-            col1, col2, col3 = st.columns(3)
+            
+            # FILA 1 DE GRÁFICAS
+            col1, col2 = st.columns(2)
             
             # --- CHART 1: Overall Percentage ---
             with col1:
                 pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
-                fig1, ax1 = plt.subplots(figsize=(4, 4))
+                fig1, ax1 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
                 if total_personas > 0:
                     if num_movimientos == 0:
                         ax1.pie([100], colors=['#d3d3d3'], startangle=90)
@@ -222,7 +224,7 @@ if file1 is not None and file2 is not None:
 
             # --- CHART 2: Breakdown %Adjustment vs %GPromotion ---
             with col2:
-                fig2, ax2 = plt.subplots(figsize=(5, 4))
+                fig2, ax2 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
                 
                 raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                 raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
@@ -246,9 +248,13 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig2)
 
+            # FILA 2 DE GRÁFICAS
+            st.markdown("<br>", unsafe_allow_html=True)
+            col3, col4 = st.columns(2)
+
             # --- CHART 3: Adjustment Reason ---
             with col3:
-                fig3, ax3 = plt.subplots(figsize=(5, 4))
+                fig3, ax3 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
                 
                 df_adj = df_filtered[cond_adj].copy()
                 
@@ -274,6 +280,34 @@ if file1 is not None and file2 is not None:
                     ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
                 
                 st.pyplot(fig3)
+
+            # --- CHART 4: Potential (Columna Y) ---
+            with col4:
+                fig4, ax4 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
+                
+                if 'Potential' in df_filtered.columns:
+                    # Limpiamos los vacíos para que no se rompa la gráfica
+                    df_pot = df_filtered['Potential'].fillna('Not Assigned').astype(str)
+                    df_pot = df_pot.replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
+                    
+                    pot_counts = df_pot.value_counts()
+                    total_pot = pot_counts.sum()
+                    
+                    if total_pot > 0:
+                        colores_pot = sns.color_palette("Set3", len(pot_counts))
+                        
+                        wedges4, _ = ax4.pie(pot_counts, startangle=90, colors=colores_pot)
+                        leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
+                        ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                        
+                        ax4.axis('equal')
+                        ax4.set_title('Potential Split', fontweight='bold', pad=15)
+                    else:
+                        ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                else:
+                    ax4.text(0.5, 0.5, "Column 'Potential' not found", ha='center', va='center')
+                
+                st.pyplot(fig4)
 
             st.markdown("---")
 
@@ -302,7 +336,7 @@ if file1 is not None and file2 is not None:
                 
             df_detalle = df_filtered[mask]
             
-            # Renombrar para mayor limpieza (opcional) pero manteniendo todas las columnas
+            # Renombrar para mayor limpieza
             df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
             
             st.write(f"Showing **{len(df_detalle)}** employees for: **{opcion_detalle}**")
