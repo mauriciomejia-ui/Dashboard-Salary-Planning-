@@ -201,7 +201,7 @@ if file1 is not None and file2 is not None:
             # --- CHART 1: Overall Percentage ---
             with col1:
                 pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
-                fig1, ax1 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
+                fig1, ax1 = plt.subplots(figsize=(7, 6))
                 if total_personas > 0:
                     if num_movimientos == 0:
                         ax1.pie([100], colors=['#d3d3d3'], startangle=90)
@@ -224,7 +224,7 @@ if file1 is not None and file2 is not None:
 
             # --- CHART 2: Breakdown %Adjustment vs %GPromotion ---
             with col2:
-                fig2, ax2 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
+                fig2, ax2 = plt.subplots(figsize=(7, 6))
                 
                 raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                 raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
@@ -254,7 +254,7 @@ if file1 is not None and file2 is not None:
 
             # --- CHART 3: Adjustment Reason ---
             with col3:
-                fig3, ax3 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
+                fig3, ax3 = plt.subplots(figsize=(7, 6))
                 
                 df_adj = df_filtered[cond_adj].copy()
                 
@@ -281,13 +281,17 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig3)
 
-            # --- CHART 4: Potential (Columna Y) ---
+            # --- CHART 4: Potential (Columna Y) SOLAMENTE para los que tienen movimiento ---
             with col4:
-                fig4, ax4 = plt.subplots(figsize=(7, 6)) # Tamaño incrementado
+                fig4, ax4 = plt.subplots(figsize=(7, 6))
                 
-                if 'Potential' in df_filtered.columns:
-                    # Limpiamos los vacíos para que no se rompa la gráfica
-                    df_pot = df_filtered['Potential'].fillna('Not Assigned').astype(str)
+                # Filtramos para analizar solo a aquellos que tienen Adjustment o Promo (>0)
+                tiene_movimiento = cond_adj | cond_promo
+                df_pot_mov = df_filtered[tiene_movimiento].copy()
+                
+                if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
+                    # Limpiamos los vacíos
+                    df_pot = df_pot_mov['Potential'].fillna('Not Assigned').astype(str)
                     df_pot = df_pot.replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
                     
                     pot_counts = df_pot.value_counts()
@@ -301,11 +305,12 @@ if file1 is not None and file2 is not None:
                         ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
                         ax4.axis('equal')
-                        ax4.set_title('Potential Split', fontweight='bold', pad=15)
+                        # Título aclaratorio para que el usuario entienda qué está viendo
+                        ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
                     else:
                         ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
                 else:
-                    ax4.text(0.5, 0.5, "Column 'Potential' not found", ha='center', va='center')
+                    ax4.text(0.5, 0.5, "No movements to analyze for Potential", ha='center', va='center')
                 
                 st.pyplot(fig4)
 
