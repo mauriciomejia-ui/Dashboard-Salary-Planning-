@@ -434,7 +434,7 @@ if file1 is not None and file2 is not None:
             # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
             st.subheader("👥 Employee Detailed List & Alerts")
             
-            # FILTROS DE LA TABLA (2 COLUMNAS PARA ORGANIZAR MEJOR)
+            # FILTROS DE LA TABLA
             col_filt1, col_filt2 = st.columns(2)
             
             with col_filt1:
@@ -445,7 +445,7 @@ if file1 is not None and file2 is not None:
                 )
                 
             with col_filt2:
-                # NUEVO FILTRO DE ALERTAS (COLORES)
+                # FILTRO DE ALERTAS (COLORES)
                 opcion_alerta = st.selectbox(
                     "2. Filter by Alerts (Colors):",
                     [
@@ -489,7 +489,6 @@ if file1 is not None and file2 is not None:
                     val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
                     val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
                     
-                    # Columna AL (índice 37)
                     val_al_raw = str(row.iloc[37]).strip() if len(row) > 37 else ""
                     al_vacio = val_al_raw == "" or val_al_raw.lower() in ['nan', 'nat', 'none']
                     
@@ -514,15 +513,15 @@ if file1 is not None and file2 is not None:
                         flag_amarillo = True
                         comentarios.append("Valor AK fuera de rango recomendado")
                         
-                    # 4. YELLOW NUEVO: AK > 0 y Columna AL está vacía
+                    # 4. YELLOW: AK > 0 y Columna AL está vacía
                     if val_ak > 0 and al_vacio:
                         flag_amarillo = True
                         comentarios.append("AK > 0 pero Columna AL está vacía")
                         
-                    # 5. RED: AI > J
-                    if val_ai > val_j:
+                    # 5. RED: AI > J y AK > 0
+                    if val_ai > val_j and val_ak > 0:
                         flag_rojo = True
-                        comentarios.append("AI supera el valor de J")
+                        comentarios.append("AI supera el valor de J y AK > 0")
                     
                     # Asignar colores por jerarquía
                     if flag_rojo:
@@ -560,12 +559,10 @@ if file1 is not None and file2 is not None:
                 css = f"background-color: {color_hex}" if color_hex else ""
                 return [css] * len(row)
 
-            # Extraemos la serie de colores y la eliminamos para no imprimir código HEX en pantalla
             if not df_detalle.empty:
                 serie_colores = df_detalle['RowColor']
                 df_visual = df_detalle.drop(columns=['RowColor'])
                 
-                # Aplicamos los estilos
                 df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
                 st.dataframe(df_estilizado, use_container_width=True)
             else:
