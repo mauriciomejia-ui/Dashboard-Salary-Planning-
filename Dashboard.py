@@ -105,12 +105,13 @@ if file1 is not None and file2 is not None:
         def_subgroups = [x for x in def_subgroups if x in subgroup_options]
         def_potentials = [x for x in def_potentials if x in potential_options]
 
-        selected_potentials = st.sidebar.multiselect("Potential (Col Y):", potential_options, default=def_potentials)
+        # Filtros en el orden solicitado (Potential hasta abajo)
         selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
         selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
         selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
         selected_comps = st.sidebar.multiselect("Compensation Area:", comp_options, default=def_comps)
         selected_subgroups = st.sidebar.multiselect("Employee Subgroup:", subgroup_options, default=def_subgroups)
+        selected_potentials = st.sidebar.multiselect("Potential (Col Y):", potential_options, default=def_potentials)
         
         # --- SIDEBAR: SAVE NEW FILTER ---
         st.sidebar.markdown("---")
@@ -339,7 +340,7 @@ if file1 is not None and file2 is not None:
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Distribution vs Columns W and AW (LIMPIA) ---
+            # --- CHART 5: Distribution vs Columns W and AW (LIMPIA Y SIN "Below Minimum") ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
@@ -351,21 +352,23 @@ if file1 is not None and file2 is not None:
                     col_w_name = df_filtered.columns[col_w_idx]
                     col_aw_name = df_filtered.columns[col_aw_idx]
                     
-                    # Extraer texto de esas columnas, quitar espacios extra
                     data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
                     data_aw = df_filtered.iloc[:, col_aw_idx].astype(str).str.strip()
                     
                     counts_w = data_w.value_counts()
                     counts_aw = data_aw.value_counts()
                     
-                    # El orden exacto que solicitaste
-                    orden_deseado = ["Below Minimum", "1Q", "2Q", "3Q", "4Q", "AboveMax"]
+                    # Eliminamos "Below Minimum" del arreglo base
+                    orden_deseado = ["1Q", "2Q", "3Q", "4Q", "AboveMax"]
                     
-                    # Revisar si de casualidad hay algún otro valor en la base de datos
                     categorias_encontradas = set(counts_w.index).union(set(counts_aw.index))
-                    categorias_extra = [c for c in categorias_encontradas if c not in orden_deseado and c.lower() not in ['nan', 'none', 'null', '']]
+                    # Excluimos expresamente "Below Minimum" (sin importar mayúsculas) y vacíos
+                    categorias_extra = [
+                        c for c in categorias_encontradas 
+                        if c not in orden_deseado 
+                        and c.lower() not in ['nan', 'none', 'null', '', 'below minimum']
+                    ]
                     
-                    # Unimos la lista
                     final_order = orden_deseado + categorias_extra
                     
                     val_w = [counts_w.get(c, 0) for c in final_order]
@@ -375,23 +378,20 @@ if file1 is not None and file2 is not None:
                         x_pos = np.arange(len(final_order))
                         ancho_barra = 0.35
                         
-                        # Dibujar barras sin el texto encima
                         bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
                         bars_aw = ax5.bar(x_pos + ancho_barra/2, val_aw, ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
                         
-                        # Valor máximo para ajustar la altura de la gráfica
                         max_y = max(max(val_w), max(val_aw))
                         
                         ax5.set_xticks(x_pos)
                         ax5.set_xticklabels(final_order, rotation=45, ha='right')
                         ax5.legend(loc="upper right", fontsize=9)
                         
-                        ax5.set_title(f'Distribution: {str(col_w_name)[:15]} vs {str(col_aw_name)[:15]}', fontweight='bold', pad=15)
+                        # TÍTULO ACTUALIZADO
+                        ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
                         ax5.set_ylabel('Number of Employees')
                         
-                        # Ajustamos el límite superior
                         ax5.set_ylim(0, max_y * 1.20)
-                        
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
                     else:
@@ -415,7 +415,6 @@ if file1 is not None and file2 is not None:
                         colores_gender = sns.color_palette("pastel", len(gender_counts))
                         bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
                         
-                        # Agregamos los números y los % arriba de cada barra
                         for bar in bars:
                             yval = bar.get_height()
                             pct = (yval / total_gender) * 100
