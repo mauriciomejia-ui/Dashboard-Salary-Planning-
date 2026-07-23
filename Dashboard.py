@@ -38,16 +38,23 @@ if file1 is not None and file2 is not None:
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
-        # Extraer columna AC (índice 28) del SuperFlex como Employee Subgroup
+        # Extraer columna AC (índice 28) como Employee Subgroup
         if len(df2.columns) > 28:
             df2['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
         else:
             df2['Employee Subgroup'] = "N/A"
+            
+        # Extraer columna AV (índice 47) como Gender
+        if len(df2.columns) > 47:
+            df2['Gender'] = df2.iloc[:, 47].astype(str)
+        else:
+            df2['Gender'] = "Unknown"
         
         # Merge Main File with SuperFlex data
-        df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup']], on='Global ID', how='left')
+        df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
         df['Chief Name'] = df['Chief Name'].fillna("No Manager Assigned")
         df['Employee Subgroup'] = df['Employee Subgroup'].replace('nan', 'Unknown').fillna('Unknown')
+        df['Gender'] = df['Gender'].replace('nan', 'Unknown').fillna('Unknown')
         
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
@@ -175,9 +182,10 @@ if file1 is not None and file2 is not None:
             st.table(cost_df)
             st.markdown("---")
 
-            # --- PREPARE DATA FOR PIE CHARTS ---
+            # --- PREPARE DATA FOR CHARTS ---
             cond_adj = adj_pct > 0
             cond_promo = promo_pct > 0
+            tiene_movimiento = cond_adj | cond_promo
             
             solo_adj = (cond_adj & ~cond_promo)
             solo_promo = (~cond_adj & cond_promo)
@@ -281,16 +289,13 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig3)
 
-            # --- CHART 4: Potential (Columna Y) SOLAMENTE para los que tienen movimiento ---
+            # --- CHART 4: Potential (SOLAMENTE para los que tienen movimiento) ---
             with col4:
                 fig4, ax4 = plt.subplots(figsize=(7, 6))
                 
-                # Filtramos para analizar solo a aquellos que tienen Adjustment o Promo (>0)
-                tiene_movimiento = cond_adj | cond_promo
                 df_pot_mov = df_filtered[tiene_movimiento].copy()
                 
                 if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
-                    # Limpiamos los vacíos
                     df_pot = df_pot_mov['Potential'].fillna('Not Assigned').astype(str)
                     df_pot = df_pot.replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
                     
@@ -305,7 +310,6 @@ if file1 is not None and file2 is not None:
                         ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
                         ax4.axis('equal')
-                        # Título aclaratorio para que el usuario entienda qué está viendo
                         ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
                     else:
                         ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
@@ -314,6 +318,47 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig4)
 
+            # FILA 3 DE GRÁFICAS (NUEVA PARA EL GÉNERO)
+            st.markdown("<br>", unsafe_allow_html=True)
+            col5, col6 = st.columns(2)
+
+            # --- CHART 5: Gender Split Bar Chart ---
+            with col5:
+                fig5, ax5 = plt.subplots(figsize=(7, 6))
+                
+                # Filtramos también por los que tienen movimiento para ser congruentes
+                df_gender_mov = df_filtered[tiene_movimiento].copy()
+                
+                if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
+                    gender_counts = df_gender_mov['Gender'].value_counts()
+                    total_gender = gender_counts.sum()
+                    
+                    if total_gender > 0:
+                        colores_gender = sns.color_palette("pastel", len(gender_counts))
+                        bars = ax5.bar(gender_counts.index, gender_counts.values, color=colores_gender)
+                        
+                        # Agregamos los números y los % arriba de cada barra
+                        for bar in bars:
+                            yval = bar.get_height()
+                            pct = (yval / total_gender) * 100
+                            ax5.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
+                                     f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                            
+                        ax5.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
+                        ax5.set_ylabel('Number of Employees')
+                        
+                        # Limpiamos los bordes superior y derecho para que se vea más limpio
+                        ax5.spines['top'].set_visible(False)
+                        ax5.spines['right'].set_visible(False)
+                    else:
+                        ax5.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                else:
+                    ax5.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
+                
+                st.pyplot(fig5)
+            
+            # (El col6 queda vacío por ahora, dándole respiro a la interfaz)
+            
             st.markdown("---")
 
             # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
