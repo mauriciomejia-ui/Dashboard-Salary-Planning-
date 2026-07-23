@@ -496,10 +496,10 @@ if file1 is not None and file2 is not None:
                     flag_naranja = False
                     flag_amarillo = False
                     
-                    # 1. ORANGE: AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
+                    # 1. ORANGE: 0 < AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
                     if pd.notna(val_z):
                         delta_dias = abs((FECHA_ACTUAL - val_z).days)
-                        if val_af < 1 and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
+                        if (0 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
                             flag_naranja = True
                             comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
                             
