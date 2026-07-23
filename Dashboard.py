@@ -432,17 +432,32 @@ if file1 is not None and file2 is not None:
             st.markdown("---")
 
             # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
-            st.subheader("👥 Employee Detailed List")
-            st.info("💡 Tip: Select a movement category below to see the full information of those specific employees.")
+            st.subheader("👥 Employee Detailed List & Alerts")
             
-            # Selector for the detail table
-            opcion_detalle = st.radio(
-                "Filter list by movement type (Chart 2 categories):",
-                ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
-                horizontal=True
-            )
+            # FILTROS DE LA TABLA (2 COLUMNAS PARA ORGANIZAR MEJOR)
+            col_filt1, col_filt2 = st.columns(2)
             
-            # Apply corresponding mask
+            with col_filt1:
+                opcion_detalle = st.radio(
+                    "1. Filter by Movement Type:",
+                    ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
+                    horizontal=True
+                )
+                
+            with col_filt2:
+                # NUEVO FILTRO DE ALERTAS (COLORES)
+                opcion_alerta = st.selectbox(
+                    "2. Filter by Alerts (Colors):",
+                    [
+                        "Show All", 
+                        "⚠️ Show Only with Alerts (Any Color)", 
+                        "🔴 Red Alerts Only (Critical)", 
+                        "🟠 Orange Alerts Only (Warning)", 
+                        "🟡 Yellow Alerts Only (Notice)"
+                    ]
+                )
+            
+            # 1. Apply Movement Type Mask
             if opcion_detalle == "Adjustment Only":
                 mask = solo_adj
             elif opcion_detalle == "Promotion Only":
@@ -457,8 +472,7 @@ if file1 is not None and file2 is not None:
             df_detalle = df_filtered[mask].copy()
             df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
             
-            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS EN COLUMNAS (J, Z, AB, AC, AF, AH, AI, AK) ---
-            # Referencia de fecha actual configurada en el sistema
+            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS EN COLUMNAS (J, Z, AB, AC, AF, AH, AI, AK, AL) ---
             FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
             def evaluar_alertas(row):
@@ -466,7 +480,6 @@ if file1 is not None and file2 is not None:
                 color = ''
                 
                 try:
-                    # Usamos .iloc para llamar las posiciones exactas de Excel en el main file
                     val_j = pd.to_numeric(row.iloc[9], errors='coerce') if len(row) > 9 else 0
                     val_z = pd.to_datetime(row.iloc[25], errors='coerce') if len(row) > 25 else pd.NaT
                     val_ab = pd.to_numeric(row.iloc[27], errors='coerce') if len(row) > 27 else 0
@@ -476,13 +489,16 @@ if file1 is not None and file2 is not None:
                     val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
                     val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
                     
+                    # Columna AL (índice 37)
+                    val_al_raw = str(row.iloc[37]).strip() if len(row) > 37 else ""
+                    al_vacio = val_al_raw == "" or val_al_raw.lower() in ['nan', 'nat', 'none']
+                    
                     flag_rojo = False
                     flag_naranja = False
                     flag_amarillo = False
                     
                     # 1. ORANGE: AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
                     if pd.notna(val_z):
-                        # Calculamos la diferencia en días absolutos (~182 días = 6 meses)
                         delta_dias = abs((FECHA_ACTUAL - val_z).days)
                         if val_af < 1 and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
                             flag_naranja = True
@@ -493,50 +509,67 @@ if file1 is not None and file2 is not None:
                         flag_amarillo = True
                         comentarios.append("Adjustment con 'None Selected'")
                         
-                    # 3. YELLOW: AK > 0 y AK < 6, OR AK > 15
+                    # 3. YELLOW: (AK > 0 y AK < 6) OR AK > 15
                     if (0 < val_ak < 6) or (val_ak > 15):
                         flag_amarillo = True
                         comentarios.append("Valor AK fuera de rango recomendado")
                         
-                    # 4. RED: AI > J
+                    # 4. YELLOW NUEVO: AK > 0 y Columna AL está vacía
+                    if val_ak > 0 and al_vacio:
+                        flag_amarillo = True
+                        comentarios.append("AK > 0 pero Columna AL está vacía")
+                        
+                    # 5. RED: AI > J
                     if val_ai > val_j:
                         flag_rojo = True
                         comentarios.append("AI supera el valor de J")
                     
-                    # Asignar colores por jerarquía de severidad (Rojo sobreescribe todo)
+                    # Asignar colores por jerarquía
                     if flag_rojo:
-                        color = 'background-color: #ffcccc' # Rojo pastel
+                        color = '#ffcccc' # Rojo pastel
                     elif flag_naranja:
-                        color = 'background-color: #ffe4b5' # Naranja pastel
+                        color = '#ffe4b5' # Naranja pastel
                     elif flag_amarillo:
-                        color = 'background-color: #ffffcc' # Amarillo pastel
+                        color = '#ffffcc' # Amarillo pastel
                         
                 except Exception:
                     pass
                 
                 return pd.Series([", ".join(comentarios), color])
 
-            # Aplicar función de evaluación a la tabla de detalle
+            # Aplicar motor de alertas
             res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
             df_detalle['Comments'] = res_alertas[0]
             df_detalle['RowColor'] = res_alertas[1]
             
+            # 2. Apply Alerts (Color) Filter
+            if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
+                df_detalle = df_detalle[df_detalle['RowColor'] != '']
+            elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
+                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
+            elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
+                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
+            elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
+                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
+            
             # --- RENDERIZAR TABLA COLOREADA ---
-            st.write(f"Showing **{len(df_detalle)}** employees for: **{opcion_detalle}**")
+            st.write(f"Showing **{len(df_detalle)}** matching employees.")
             
-            # Función para pintar filas basado en la columna oculta 'RowColor'
             def aplicar_color_fila(row, colores_serie):
-                color = colores_serie.loc[row.name]
-                return [color] * len(row)
+                color_hex = colores_serie.loc[row.name]
+                css = f"background-color: {color_hex}" if color_hex else ""
+                return [css] * len(row)
 
-            # Extraemos la serie de colores y eliminamos esa columna para no mostrarla en pantalla
-            serie_colores = df_detalle['RowColor']
-            df_visual = df_detalle.drop(columns=['RowColor'])
-            
-            # Aplicamos los estilos de Pandas Styler
-            df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
-            
-            st.dataframe(df_estilizado, use_container_width=True)
+            # Extraemos la serie de colores y la eliminamos para no imprimir código HEX en pantalla
+            if not df_detalle.empty:
+                serie_colores = df_detalle['RowColor']
+                df_visual = df_detalle.drop(columns=['RowColor'])
+                
+                # Aplicamos los estilos
+                df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
+                st.dataframe(df_estilizado, use_container_width=True)
+            else:
+                st.info("No employees match the selected table filters.")
                 
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
