@@ -340,7 +340,7 @@ if file1 is not None and file2 is not None:
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Distribution vs Columns W and AW (LIMPIA Y SIN "Below Minimum") ---
+            # --- CHART 5: Distribution vs Columns W and AW ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
@@ -358,11 +358,8 @@ if file1 is not None and file2 is not None:
                     counts_w = data_w.value_counts()
                     counts_aw = data_aw.value_counts()
                     
-                    # Eliminamos "Below Minimum" del arreglo base
                     orden_deseado = ["1Q", "2Q", "3Q", "4Q", "AboveMax"]
-                    
                     categorias_encontradas = set(counts_w.index).union(set(counts_aw.index))
-                    # Excluimos expresamente "Below Minimum" (sin importar mayúsculas) y vacíos
                     categorias_extra = [
                         c for c in categorias_encontradas 
                         if c not in orden_deseado 
@@ -387,7 +384,6 @@ if file1 is not None and file2 is not None:
                         ax5.set_xticklabels(final_order, rotation=45, ha='right')
                         ax5.legend(loc="upper right", fontsize=9)
                         
-                        # TÍTULO ACTUALIZADO
                         ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
                         ax5.set_ylabel('Number of Employees')
                         
@@ -458,13 +454,89 @@ if file1 is not None and file2 is not None:
             else:
                 mask = pd.Series(True, index=df_filtered.index)
                 
-            df_detalle = df_filtered[mask]
-            
-            # Renombrar para mayor limpieza
+            df_detalle = df_filtered[mask].copy()
             df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
             
+            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS EN COLUMNAS (J, Z, AB, AC, AF, AH, AI, AK) ---
+            # Referencia de fecha actual configurada en el sistema
+            FECHA_ACTUAL = pd.to_datetime('2026-07-23')
+
+            def evaluar_alertas(row):
+                comentarios = []
+                color = ''
+                
+                try:
+                    # Usamos .iloc para llamar las posiciones exactas de Excel en el main file
+                    val_j = pd.to_numeric(row.iloc[9], errors='coerce') if len(row) > 9 else 0
+                    val_z = pd.to_datetime(row.iloc[25], errors='coerce') if len(row) > 25 else pd.NaT
+                    val_ab = pd.to_numeric(row.iloc[27], errors='coerce') if len(row) > 27 else 0
+                    val_ac = pd.to_numeric(row.iloc[28], errors='coerce') if len(row) > 28 else 0
+                    val_af = pd.to_numeric(row.iloc[31], errors='coerce') if len(row) > 31 else 0
+                    val_ah = str(row.iloc[33]).strip() if len(row) > 33 else ""
+                    val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
+                    val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
+                    
+                    flag_rojo = False
+                    flag_naranja = False
+                    flag_amarillo = False
+                    
+                    # 1. ORANGE: AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
+                    if pd.notna(val_z):
+                        # Calculamos la diferencia en días absolutos (~182 días = 6 meses)
+                        delta_dias = abs((FECHA_ACTUAL - val_z).days)
+                        if val_af < 1 and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
+                            flag_naranja = True
+                            comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
+                            
+                    # 2. YELLOW: AF > 0 AND AH == "None Selected"
+                    if val_af > 0 and val_ah == "None Selected":
+                        flag_amarillo = True
+                        comentarios.append("Adjustment con 'None Selected'")
+                        
+                    # 3. YELLOW: AK > 0 y AK < 6, OR AK > 15
+                    if (0 < val_ak < 6) or (val_ak > 15):
+                        flag_amarillo = True
+                        comentarios.append("Valor AK fuera de rango recomendado")
+                        
+                    # 4. RED: AI > J
+                    if val_ai > val_j:
+                        flag_rojo = True
+                        comentarios.append("AI supera el valor de J")
+                    
+                    # Asignar colores por jerarquía de severidad (Rojo sobreescribe todo)
+                    if flag_rojo:
+                        color = 'background-color: #ffcccc' # Rojo pastel
+                    elif flag_naranja:
+                        color = 'background-color: #ffe4b5' # Naranja pastel
+                    elif flag_amarillo:
+                        color = 'background-color: #ffffcc' # Amarillo pastel
+                        
+                except Exception:
+                    pass
+                
+                return pd.Series([", ".join(comentarios), color])
+
+            # Aplicar función de evaluación a la tabla de detalle
+            res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
+            df_detalle['Comments'] = res_alertas[0]
+            df_detalle['RowColor'] = res_alertas[1]
+            
+            # --- RENDERIZAR TABLA COLOREADA ---
             st.write(f"Showing **{len(df_detalle)}** employees for: **{opcion_detalle}**")
-            st.dataframe(df_detalle, use_container_width=True)
+            
+            # Función para pintar filas basado en la columna oculta 'RowColor'
+            def aplicar_color_fila(row, colores_serie):
+                color = colores_serie.loc[row.name]
+                return [color] * len(row)
+
+            # Extraemos la serie de colores y eliminamos esa columna para no mostrarla en pantalla
+            serie_colores = df_detalle['RowColor']
+            df_visual = df_detalle.drop(columns=['RowColor'])
+            
+            # Aplicamos los estilos de Pandas Styler
+            df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
+            
+            st.dataframe(df_estilizado, use_container_width=True)
                 
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
