@@ -105,7 +105,7 @@ if file1 is not None and file2 is not None:
         def_subgroups = [x for x in def_subgroups if x in subgroup_options]
         def_potentials = [x for x in def_potentials if x in potential_options]
 
-        # Filtros en el orden solicitado (Potential hasta abajo)
+        # Filtros en el orden solicitado
         selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
         selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
         selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
@@ -496,10 +496,10 @@ if file1 is not None and file2 is not None:
                     flag_naranja = False
                     flag_amarillo = False
                     
-                    # 1. ORANGE: 0 < AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
+                    # 1. ORANGE: 0.01 < AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
                     if pd.notna(val_z):
                         delta_dias = abs((FECHA_ACTUAL - val_z).days)
-                        if (0 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
+                        if (0.01 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
                             flag_naranja = True
                             comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
                             
