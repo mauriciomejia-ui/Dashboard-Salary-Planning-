@@ -198,8 +198,8 @@ if file1 is not None and file2 is not None:
             num_ambos = ambos.sum()
             num_sin_mov = sin_mov.sum()
             
-            num_movimientos = num_solo_adj + num_solo_promo + num_ambos
             total_personas = len(df_filtered)
+            num_movimientos = num_solo_adj + num_solo_promo + num_ambos
 
             # --- CHARTS (2x3 GRID ARCHITECTURE) ---
             st.subheader("📊 Graphical Summary")
@@ -209,7 +209,6 @@ if file1 is not None and file2 is not None:
             
             # --- CHART 1: Overall Percentage ---
             with col1:
-                pct_mov = (num_movimientos / total_personas) * 100 if total_personas > 0 else 0
                 fig1, ax1 = plt.subplots(figsize=(7, 6))
                 if total_personas > 0:
                     if num_movimientos == 0:
@@ -323,57 +322,85 @@ if file1 is not None and file2 is not None:
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Potential vs Columns W and AW (NUEVA GRÁFICA) ---
+            # --- CHART 5: Distribution vs Columns W and AW (NUEVA LÓGICA) ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
-                # Ubicamos columnas W (índice 22) y AW (índice 48)
+                # Índices de columnas
                 col_w_idx = 22
                 col_aw_idx = 48
                 
-                if len(df_filtered.columns) > max(col_w_idx, col_aw_idx):
+                if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_aw_idx):
                     col_w_name = df_filtered.columns[col_w_idx]
                     col_aw_name = df_filtered.columns[col_aw_idx]
                     
-                    df_bar_pot = df_filtered.copy()
+                    # Extraer texto de esas columnas, quitar espacios extra
+                    data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
+                    data_aw = df_filtered.iloc[:, col_aw_idx].astype(str).str.strip()
                     
-                    if 'Potential' in df_bar_pot.columns:
-                        df_bar_pot['Potential'] = df_bar_pot['Potential'].fillna('Not Assigned').astype(str)
-                        df_bar_pot['Potential'] = df_bar_pot['Potential'].replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
+                    counts_w = data_w.value_counts()
+                    counts_aw = data_aw.value_counts()
+                    
+                    # El orden exacto que solicitaste
+                    orden_deseado = ["Below Minimum", "1Q", "2Q", "3Q", "4Q", "AboveMax"]
+                    
+                    # Revisar si de casualidad hay algún otro valor en la base de datos que no hayamos previsto
+                    categorias_encontradas = set(counts_w.index).union(set(counts_aw.index))
+                    categorias_extra = [c for c in categorias_encontradas if c not in orden_deseado and c.lower() not in ['nan', 'none', 'null', '']]
+                    
+                    # Unimos la lista (primero el orden oficial, luego las extras si las hubiera)
+                    final_order = orden_deseado + categorias_extra
+                    
+                    val_w = [counts_w.get(c, 0) for c in final_order]
+                    val_aw = [counts_aw.get(c, 0) for c in final_order]
+                    
+                    if sum(val_w) > 0 or sum(val_aw) > 0:
+                        x_pos = np.arange(len(final_order))
+                        ancho_barra = 0.35
                         
-                        # Forzamos conversión a número para sumar los montos
-                        df_bar_pot['Val_W'] = pd.to_numeric(df_bar_pot.iloc[:, col_w_idx], errors='coerce').fillna(0)
-                        df_bar_pot['Val_AW'] = pd.to_numeric(df_bar_pot.iloc[:, col_aw_idx], errors='coerce').fillna(0)
+                        # Dibujar barras
+                        bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
+                        bars_aw = ax5.bar(x_pos + ancho_barra/2, val_aw, ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
                         
-                        # Agrupamos sumando
-                        grouped = df_bar_pot.groupby('Potential')[['Val_W', 'Val_AW']].sum()
+                        # Valor máximo para ajustar la altura de los números (que no se recorten)
+                        max_y = max(max(val_w), max(val_aw))
                         
-                        if not grouped.empty and (grouped['Val_W'].sum() > 0 or grouped['Val_AW'].sum() > 0):
-                            x_pos = np.arange(len(grouped))
-                            ancho_barra = 0.35
-                            
-                            ax5.bar(x_pos - ancho_barra/2, grouped['Val_W'], ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
-                            ax5.bar(x_pos + ancho_barra/2, grouped['Val_AW'], ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
-                            
-                            ax5.set_xticks(x_pos)
-                            ax5.set_xticklabels(grouped.index, rotation=45, ha='right')
-                            ax5.legend(loc="upper right", fontsize=9)
-                            
-                            ax5.set_title(f'Potential vs {str(col_w_name)[:15]} & {str(col_aw_name)[:15]}', fontweight='bold', pad=15)
-                            
-                            # Limpieza estética de bordes
-                            ax5.spines['top'].set_visible(False)
-                            ax5.spines['right'].set_visible(False)
-                        else:
-                            ax5.text(0.5, 0.5, "No numeric data for Col W / Col AW", ha='center', va='center')
+                        # --- Etiquetas para la columna W ---
+                        for bar in bars_w:
+                            yval = bar.get_height()
+                            if yval > 0:
+                                pct = (yval / total_personas) * 100
+                                ax5.text(bar.get_x() + bar.get_width()/2, yval + (max_y * 0.02), 
+                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=9, fontweight='bold')
+                                         
+                        # --- Etiquetas para la columna AW ---
+                        for bar in bars_aw:
+                            yval = bar.get_height()
+                            if yval > 0:
+                                pct = (yval / total_personas) * 100
+                                ax5.text(bar.get_x() + bar.get_width()/2, yval + (max_y * 0.02), 
+                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=9, fontweight='bold')
+                        
+                        ax5.set_xticks(x_pos)
+                        ax5.set_xticklabels(final_order, rotation=45, ha='right')
+                        ax5.legend(loc="upper right", fontsize=9)
+                        
+                        ax5.set_title(f'Distribution: {str(col_w_name)[:15]} vs {str(col_aw_name)[:15]}', fontweight='bold', pad=15)
+                        ax5.set_ylabel('Number of Employees')
+                        
+                        # Ajustamos el límite superior para que quepan bien los %
+                        ax5.set_ylim(0, max_y * 1.20)
+                        
+                        ax5.spines['top'].set_visible(False)
+                        ax5.spines['right'].set_visible(False)
                     else:
-                        ax5.text(0.5, 0.5, "Column 'Potential' not found", ha='center', va='center')
+                        ax5.text(0.5, 0.5, "No data matches these categories", ha='center', va='center')
                 else:
-                    ax5.text(0.5, 0.5, "Columns W or AW not found in file", ha='center', va='center')
+                    ax5.text(0.5, 0.5, "Columns W or AW not found or missing data", ha='center', va='center')
                     
                 st.pyplot(fig5)
 
-            # --- CHART 6: Gender Split Bar Chart (AHORA AL FINAL) ---
+            # --- CHART 6: Gender Split Bar Chart (AL FINAL) ---
             with col6:
                 fig6, ax6 = plt.subplots(figsize=(7, 6))
                 
