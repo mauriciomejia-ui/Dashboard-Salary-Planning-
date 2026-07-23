@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import json
 import os
+import numpy as np
 
 # Page Configuration
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
@@ -200,7 +201,7 @@ if file1 is not None and file2 is not None:
             num_movimientos = num_solo_adj + num_solo_promo + num_ambos
             total_personas = len(df_filtered)
 
-            # --- CHARTS (2x2 GRID FOR LARGER DISPLAY) ---
+            # --- CHARTS (2x3 GRID ARCHITECTURE) ---
             st.subheader("📊 Graphical Summary")
             
             # FILA 1 DE GRÁFICAS
@@ -318,15 +319,64 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig4)
 
-            # FILA 3 DE GRÁFICAS (NUEVA PARA EL GÉNERO)
+            # FILA 3 DE GRÁFICAS
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Gender Split Bar Chart ---
+            # --- CHART 5: Potential vs Columns W and AW (NUEVA GRÁFICA) ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
-                # Filtramos también por los que tienen movimiento para ser congruentes
+                # Ubicamos columnas W (índice 22) y AW (índice 48)
+                col_w_idx = 22
+                col_aw_idx = 48
+                
+                if len(df_filtered.columns) > max(col_w_idx, col_aw_idx):
+                    col_w_name = df_filtered.columns[col_w_idx]
+                    col_aw_name = df_filtered.columns[col_aw_idx]
+                    
+                    df_bar_pot = df_filtered.copy()
+                    
+                    if 'Potential' in df_bar_pot.columns:
+                        df_bar_pot['Potential'] = df_bar_pot['Potential'].fillna('Not Assigned').astype(str)
+                        df_bar_pot['Potential'] = df_bar_pot['Potential'].replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
+                        
+                        # Forzamos conversión a número para sumar los montos
+                        df_bar_pot['Val_W'] = pd.to_numeric(df_bar_pot.iloc[:, col_w_idx], errors='coerce').fillna(0)
+                        df_bar_pot['Val_AW'] = pd.to_numeric(df_bar_pot.iloc[:, col_aw_idx], errors='coerce').fillna(0)
+                        
+                        # Agrupamos sumando
+                        grouped = df_bar_pot.groupby('Potential')[['Val_W', 'Val_AW']].sum()
+                        
+                        if not grouped.empty and (grouped['Val_W'].sum() > 0 or grouped['Val_AW'].sum() > 0):
+                            x_pos = np.arange(len(grouped))
+                            ancho_barra = 0.35
+                            
+                            ax5.bar(x_pos - ancho_barra/2, grouped['Val_W'], ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
+                            ax5.bar(x_pos + ancho_barra/2, grouped['Val_AW'], ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
+                            
+                            ax5.set_xticks(x_pos)
+                            ax5.set_xticklabels(grouped.index, rotation=45, ha='right')
+                            ax5.legend(loc="upper right", fontsize=9)
+                            
+                            ax5.set_title(f'Potential vs {str(col_w_name)[:15]} & {str(col_aw_name)[:15]}', fontweight='bold', pad=15)
+                            
+                            # Limpieza estética de bordes
+                            ax5.spines['top'].set_visible(False)
+                            ax5.spines['right'].set_visible(False)
+                        else:
+                            ax5.text(0.5, 0.5, "No numeric data for Col W / Col AW", ha='center', va='center')
+                    else:
+                        ax5.text(0.5, 0.5, "Column 'Potential' not found", ha='center', va='center')
+                else:
+                    ax5.text(0.5, 0.5, "Columns W or AW not found in file", ha='center', va='center')
+                    
+                st.pyplot(fig5)
+
+            # --- CHART 6: Gender Split Bar Chart (AHORA AL FINAL) ---
+            with col6:
+                fig6, ax6 = plt.subplots(figsize=(7, 6))
+                
                 df_gender_mov = df_filtered[tiene_movimiento].copy()
                 
                 if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
@@ -335,29 +385,26 @@ if file1 is not None and file2 is not None:
                     
                     if total_gender > 0:
                         colores_gender = sns.color_palette("pastel", len(gender_counts))
-                        bars = ax5.bar(gender_counts.index, gender_counts.values, color=colores_gender)
+                        bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
                         
                         # Agregamos los números y los % arriba de cada barra
                         for bar in bars:
                             yval = bar.get_height()
                             pct = (yval / total_gender) * 100
-                            ax5.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
+                            ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
                                      f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
                             
-                        ax5.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
-                        ax5.set_ylabel('Number of Employees')
+                        ax6.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
+                        ax6.set_ylabel('Number of Employees')
                         
-                        # Limpiamos los bordes superior y derecho para que se vea más limpio
-                        ax5.spines['top'].set_visible(False)
-                        ax5.spines['right'].set_visible(False)
+                        ax6.spines['top'].set_visible(False)
+                        ax6.spines['right'].set_visible(False)
                     else:
-                        ax5.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                        ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
                 else:
-                    ax5.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
+                    ax6.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
                 
-                st.pyplot(fig5)
-            
-            # (El col6 queda vacío por ahora, dándole respiro a la interfaz)
+                st.pyplot(fig6)
             
             st.markdown("---")
 
