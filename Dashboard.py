@@ -53,16 +53,33 @@ if file1 is not None and file2 is not None:
         
         # Merge Main File with SuperFlex data
         df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
+        
+        # Limpieza inicial de variables críticas
         df['Chief Name'] = df['Chief Name'].fillna("No Manager Assigned")
         df['Employee Subgroup'] = df['Employee Subgroup'].replace('nan', 'Unknown').fillna('Unknown')
         df['Gender'] = df['Gender'].replace('nan', 'Unknown').fillna('Unknown')
+        
+        if 'Potential' in df.columns:
+            df['Potential'] = df['Potential'].fillna('Not Assigned').astype(str)
+            df['Potential'] = df['Potential'].replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
+        else:
+            df['Potential'] = 'Not Assigned'
         
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
         nombres_disponibles = ["-- None --"] + list(st.session_state['memoria_filtros'].keys())
         filtro_elegido = st.sidebar.selectbox("Load a configuration:", nombres_disponibles)
         
-        def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups = [], [], [], [], []
+        def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
+        
+        # Opciones disponibles
+        gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist())
+        org_options = sorted(df['Reporting Organization'].dropna().unique().tolist())
+        func_options = sorted(df['Function'].dropna().unique().tolist())
+        comp_options = sorted(df['Compensation Area'].dropna().unique().tolist())
+        subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
+        potential_options = sorted(df['Potential'].unique().tolist())
+
         if filtro_elegido != "-- None --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
             def_gerentes = config.get("gerentes", [])
@@ -70,6 +87,10 @@ if file1 is not None and file2 is not None:
             def_funcs = config.get("funcs", [])
             def_comps = config.get("comps", [])
             def_subgroups = config.get("subgroups", [])
+            def_potentials = config.get("potentials", [])
+        else:
+            # Filtro por defecto para Potential si no se carga ninguna configuración
+            def_potentials = [x for x in potential_options if x.strip().lower() in ['strategic few', 'high potential']]
 
         st.sidebar.markdown("---")
         
@@ -77,18 +98,14 @@ if file1 is not None and file2 is not None:
         st.sidebar.header("🔍 Data Filters")
         st.sidebar.info("Leave blank to include all.")
         
-        gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist())
-        org_options = sorted(df['Reporting Organization'].dropna().unique().tolist())
-        func_options = sorted(df['Function'].dropna().unique().tolist())
-        comp_options = sorted(df['Compensation Area'].dropna().unique().tolist())
-        subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
-
         def_gerentes = [x for x in def_gerentes if x in gerente_options]
         def_orgs = [x for x in def_orgs if x in org_options]
         def_funcs = [x for x in def_funcs if x in func_options]
         def_comps = [x for x in def_comps if x in comp_options]
         def_subgroups = [x for x in def_subgroups if x in subgroup_options]
+        def_potentials = [x for x in def_potentials if x in potential_options]
 
+        selected_potentials = st.sidebar.multiselect("Potential (Col Y):", potential_options, default=def_potentials)
         selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
         selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
         selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
@@ -107,7 +124,8 @@ if file1 is not None and file2 is not None:
                     "orgs": selected_orgs,
                     "funcs": selected_funcs,
                     "comps": selected_comps,
-                    "subgroups": selected_subgroups
+                    "subgroups": selected_subgroups,
+                    "potentials": selected_potentials
                 }
                 with open(ARCHIVO_FILTROS, 'w', encoding='utf-8') as f:
                     json.dump(st.session_state['memoria_filtros'], f)
@@ -126,13 +144,15 @@ if file1 is not None and file2 is not None:
         filtros_finales_funcs = selected_funcs if selected_funcs else func_options
         filtros_finales_comps = selected_comps if selected_comps else comp_options
         filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
+        filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
         df_filtered = df[
             (df['Chief Name'].isin(filtros_finales_gerentes)) &
             (df['Reporting Organization'].isin(filtros_finales_orgs)) &
             (df['Function'].isin(filtros_finales_funcs)) &
             (df['Compensation Area'].isin(filtros_finales_comps)) &
-            (df['Employee Subgroup'].isin(filtros_finales_subgroups))
+            (df['Employee Subgroup'].isin(filtros_finales_subgroups)) &
+            (df['Potential'].isin(filtros_finales_potentials))
         ]
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
@@ -296,10 +316,7 @@ if file1 is not None and file2 is not None:
                 df_pot_mov = df_filtered[tiene_movimiento].copy()
                 
                 if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
-                    df_pot = df_pot_mov['Potential'].fillna('Not Assigned').astype(str)
-                    df_pot = df_pot.replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
-                    
-                    pot_counts = df_pot.value_counts()
+                    pot_counts = df_pot_mov['Potential'].value_counts()
                     total_pot = pot_counts.sum()
                     
                     if total_pot > 0:
@@ -322,7 +339,7 @@ if file1 is not None and file2 is not None:
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Distribution vs Columns W and AW (NUEVA LÓGICA) ---
+            # --- CHART 5: Distribution vs Columns W and AW (LIMPIA) ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
@@ -344,11 +361,11 @@ if file1 is not None and file2 is not None:
                     # El orden exacto que solicitaste
                     orden_deseado = ["Below Minimum", "1Q", "2Q", "3Q", "4Q", "AboveMax"]
                     
-                    # Revisar si de casualidad hay algún otro valor en la base de datos que no hayamos previsto
+                    # Revisar si de casualidad hay algún otro valor en la base de datos
                     categorias_encontradas = set(counts_w.index).union(set(counts_aw.index))
                     categorias_extra = [c for c in categorias_encontradas if c not in orden_deseado and c.lower() not in ['nan', 'none', 'null', '']]
                     
-                    # Unimos la lista (primero el orden oficial, luego las extras si las hubiera)
+                    # Unimos la lista
                     final_order = orden_deseado + categorias_extra
                     
                     val_w = [counts_w.get(c, 0) for c in final_order]
@@ -358,28 +375,12 @@ if file1 is not None and file2 is not None:
                         x_pos = np.arange(len(final_order))
                         ancho_barra = 0.35
                         
-                        # Dibujar barras
+                        # Dibujar barras sin el texto encima
                         bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
                         bars_aw = ax5.bar(x_pos + ancho_barra/2, val_aw, ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
                         
-                        # Valor máximo para ajustar la altura de los números (que no se recorten)
+                        # Valor máximo para ajustar la altura de la gráfica
                         max_y = max(max(val_w), max(val_aw))
-                        
-                        # --- Etiquetas para la columna W ---
-                        for bar in bars_w:
-                            yval = bar.get_height()
-                            if yval > 0:
-                                pct = (yval / total_personas) * 100
-                                ax5.text(bar.get_x() + bar.get_width()/2, yval + (max_y * 0.02), 
-                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=9, fontweight='bold')
-                                         
-                        # --- Etiquetas para la columna AW ---
-                        for bar in bars_aw:
-                            yval = bar.get_height()
-                            if yval > 0:
-                                pct = (yval / total_personas) * 100
-                                ax5.text(bar.get_x() + bar.get_width()/2, yval + (max_y * 0.02), 
-                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=9, fontweight='bold')
                         
                         ax5.set_xticks(x_pos)
                         ax5.set_xticklabels(final_order, rotation=45, ha='right')
@@ -388,7 +389,7 @@ if file1 is not None and file2 is not None:
                         ax5.set_title(f'Distribution: {str(col_w_name)[:15]} vs {str(col_aw_name)[:15]}', fontweight='bold', pad=15)
                         ax5.set_ylabel('Number of Employees')
                         
-                        # Ajustamos el límite superior para que quepan bien los %
+                        # Ajustamos el límite superior
                         ax5.set_ylim(0, max_y * 1.20)
                         
                         ax5.spines['top'].set_visible(False)
@@ -400,7 +401,7 @@ if file1 is not None and file2 is not None:
                     
                 st.pyplot(fig5)
 
-            # --- CHART 6: Gender Split Bar Chart (AL FINAL) ---
+            # --- CHART 6: Gender Split Bar Chart ---
             with col6:
                 fig6, ax6 = plt.subplots(figsize=(7, 6))
                 
