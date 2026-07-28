@@ -1,6 +1,22 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.subplots as subplots
+import matplotlib.subplots as subplots # <-- Esta línea causa el error
+import matplotlib.pyplot as plt
+Debe quedar así:
+
+Python
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import json
+import os
+import numpy as np
+Aquí tienes el código completo corregido para que lo puedas copiar y pegar directamente y vuelva a funcionar tu app al 100%:
+
+Python
+import streamlit as st
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
