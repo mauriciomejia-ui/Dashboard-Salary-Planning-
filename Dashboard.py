@@ -164,12 +164,14 @@ if file1 is not None and file2 is not None:
             # --- COST SUMMARY TABLE ---
             st.subheader("💰 Cost Summary")
             
+            # Obtenemos las variables base
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             
             col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
+            # Cálculos de Costos
             cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
             cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
@@ -223,6 +225,7 @@ if file1 is not None and file2 is not None:
             # --- CHARTS (2x3 GRID ARCHITECTURE) ---
             st.subheader("📊 Graphical Summary")
             
+            # FILA 1 DE GRÁFICAS
             col1, col2 = st.columns(2)
             
             with col1:
@@ -335,64 +338,69 @@ if file1 is not None and file2 is not None:
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
+                # Índices de columnas (W = 22, AX = 49)
                 col_w_idx = 22
-                col_aw_idx = 48
+                col_ax_idx = 49
                 
-                if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_aw_idx):
+                if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_ax_idx):
                     col_w_name = df_filtered.columns[col_w_idx]
-                    col_aw_name = df_filtered.columns[col_aw_idx]
+                    col_ax_name = df_filtered.columns[col_ax_idx]
                     
                     data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
-                    data_aw = df_filtered.iloc[:, col_aw_idx].astype(str).str.strip()
+                    data_ax = df_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
+                    
+                    # Mapeo estandarizador para empatar con el orden solicitado
+                    mapeo = {
+                        "Below Minimum": "Below Min",
+                        "Below Min": "Below Min",
+                        "1Q": "1Q",
+                        "2Q": "2Q",
+                        "3Q": "3Q",
+                        "4Q": "4Q",
+                        "AboveMax": "Above max",
+                        "Above max": "Above max"
+                    }
+                    
+                    data_w = data_w.replace(mapeo)
+                    data_ax = data_ax.replace(mapeo)
                     
                     counts_w = data_w.value_counts()
-                    counts_aw = data_aw.value_counts()
+                    counts_ax = data_ax.value_counts()
                     
-                    orden_deseado = ["1Q", "2Q", "3Q", "4Q", "AboveMax"]
-                    categorias_encontradas = set(counts_w.index).union(set(counts_aw.index))
-                    categorias_extra = [
-                        c for c in categorias_encontradas 
-                        if c not in orden_deseado 
-                        and c.lower() not in ['nan', 'none', 'null', '', 'below minimum']
-                    ]
-                    
-                    final_order = orden_deseado + categorias_extra
+                    # ORDEN ESTRICTO SIN IMPORTAR FILTROS
+                    final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
                     
                     val_w = [counts_w.get(c, 0) for c in final_order]
-                    val_aw = [counts_aw.get(c, 0) for c in final_order]
+                    val_ax = [counts_ax.get(c, 0) for c in final_order]
                     
-                    if sum(val_w) > 0 or sum(val_aw) > 0:
-                        x_pos = np.arange(len(final_order))
-                        ancho_barra = 0.35
-                        
-                        bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
-                        bars_aw = ax5.bar(x_pos + ancho_barra/2, val_aw, ancho_barra, label=str(col_aw_name)[:20], color='#87cefa')
-                        
-                        max_y = max(max(val_w), max(val_aw))
-                        
-                        # --- MEJORA VISUAL: Etiquetas de valores sobre las barras ---
-                        ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
-                        ax5.bar_label(bars_aw, padding=3, fontsize=9, color='#333333')
-                        
-                        ax5.set_xticks(x_pos)
-                        ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
-                        
-                        # --- MEJORA VISUAL: Mover la leyenda afuera (abajo) ---
-                        ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
-                        
-                        ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
-                        ax5.set_ylabel('Number of Employees')
-                        
-                        ax5.set_ylim(0, max_y * 1.15)
-                        ax5.spines['top'].set_visible(False)
-                        ax5.spines['right'].set_visible(False)
-                        
-                        # --- MEJORA VISUAL: Auto-ajuste para evitar que se encimen textos ---
-                        fig5.tight_layout()
-                    else:
-                        ax5.text(0.5, 0.5, "No data matches these categories", ha='center', va='center')
+                    x_pos = np.arange(len(final_order))
+                    ancho_barra = 0.35
+                    
+                    bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
+                    bars_ax = ax5.bar(x_pos + ancho_barra/2, val_ax, ancho_barra, label=str(col_ax_name)[:20], color='#87cefa')
+                    
+                    max_y = max(max(val_w, default=0), max(val_ax, default=0))
+                    if max_y == 0: 
+                        max_y = 1 # Prevenir division por 0 en la gráfica si todo está vacío
+                    
+                    ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
+                    ax5.bar_label(bars_ax, padding=3, fontsize=9, color='#333333')
+                    
+                    ax5.set_xticks(x_pos)
+                    ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
+                    
+                    ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
+                    
+                    ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
+                    ax5.set_ylabel('Number of Employees')
+                    
+                    ax5.set_ylim(0, max_y * 1.15)
+                    ax5.spines['top'].set_visible(False)
+                    ax5.spines['right'].set_visible(False)
+                    
+                    fig5.tight_layout()
                 else:
-                    ax5.text(0.5, 0.5, "Columns W or AW not found or missing data", ha='center', va='center')
+                    ax5.text(0.5, 0.5, "Columns W or AX not found", ha='center', va='center')
                     
                 st.pyplot(fig5)
 
