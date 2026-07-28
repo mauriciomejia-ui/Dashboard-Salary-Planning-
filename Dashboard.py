@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.subplots as subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
@@ -511,17 +512,98 @@ if file1 is not None and file2 is not None:
                 
                 if len(df_filtered.columns) > max(col_bn_idx, col_bp_idx):
                     mask_stock = df_filtered.iloc[:, col_bj_idx].astype(str).str.strip().str.lower() == 'yes'
-                    df_equity = df_filtered[mask_stock].copy()
+                    df_equity_full = df_filtered[mask_stock].copy()
                     
-                    if not df_equity.empty:
-                        df_equity = df_equity.rename(columns={'Chief Name': 'Manager'})
+                    if not df_equity_full.empty:
+                        df_equity_full = df_equity_full.rename(columns={'Chief Name': 'Manager'})
                         
-                        # --- 1. CLASIFICACIÓN DE CONCEPTOS (BN Category) ---
+                        # --- 0. EXTRACCIÓN DE VARIABLES GLOBALES ---
+                        val_bn_full = pd.to_numeric(df_equity_full.iloc[:, col_bn_idx], errors='coerce').fillna(0)
+                        val_bl_full = pd.to_numeric(df_equity_full.iloc[:, col_bl_idx], errors='coerce').fillna(0)
+                        
+                        # Guardamos el Proposed Value para poder usarlo en la tabla final también
+                        df_equity_full['Proposed Recommendation Value'] = val_bl_full * (val_bn_full / 100)
+                        
+                        # Lógica para la Gráfica de Pastel (Pie Chart)
+                        c_unplanned = (val_bn_full == 0).sum()
+                        c_below = ((val_bn_full > 0) & (val_bn_full < 100)).sum()
+                        c_midpoint = (val_bn_full == 100).sum()
+                        c_above = (val_bn_full > 100).sum()
+                        
+                        st.markdown("### Equity Overview")
+                        
+                        # Layout lado a lado para la Gráfica y el Summary
+                        col_pie, col_summary = st.columns([1, 1.5])
+                        
+                        # --- 1. RENDER PIE CHART ---
+                        with col_pie:
+                            pie_labels_raw = ["Unplanned equity", "Below Midpoint", "Midpoint", "Above midpoint"]
+                            pie_sizes_raw = [c_unplanned, c_below, c_midpoint, c_above]
+                            pie_colors_raw = ['#d3d3d3', '#ffb347', '#87cefa', '#ff9999'] # Gris, Naranja, Azul claro, Rojo claro
+                            
+                            # Filtramos categorías que estén en 0 para no encimar texto
+                            pie_labels = [l for l, s in zip(pie_labels_raw, pie_sizes_raw) if s > 0]
+                            pie_sizes = [s for s in pie_sizes_raw if s > 0]
+                            pie_colors = [c for c, s in zip(pie_colors_raw, pie_sizes_raw) if s > 0]
+                            
+                            fig_eq, ax_eq = plt.subplots(figsize=(5, 4))
+                            if sum(pie_sizes) > 0:
+                                wedges_eq, _ = ax_eq.pie(pie_sizes, startangle=90, colors=pie_colors)
+                                leyenda_eq = [f"{l} - {s}" for l, s in zip(pie_labels, pie_sizes)]
+                                ax_eq.legend(wedges_eq, leyenda_eq, title="Distribution", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                                ax_eq.axis('equal')
+                            else:
+                                ax_eq.text(0.5, 0.5, "No data available", ha='center', va='center')
+                            st.pyplot(fig_eq)
+                        
+                        # --- 2. RENDER SUMMARY GENERAL & MULTISELECT ---
+                        with col_summary:
+                            equity_budget = val_bl_full.sum()
+                            total_proposed = df_equity_full['Proposed Recommendation Value'].sum()
+                            variance = total_proposed - equity_budget
+                            
+                            if variance <= 0:
+                                status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
+                            else:
+                                status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
+                                
+                            st.markdown("##### Total Equity Budget Summary")
+                            summary_html = f"""
+                            <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
+                              <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
+                                <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
+                                <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
+                                <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Status (Variance)</th>
+                              </tr>
+                              <tr style="background-color: white;">
+                                <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${equity_budget:,.2f}</td>
+                                <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
+                                <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
+                              </tr>
+                            </table>
+                            """
+                            st.markdown(summary_html, unsafe_allow_html=True)
+                            
+                            st.markdown("##### Filter Employees Table")
+                            opciones_conceptos = [
+                                "0%", 
+                                "Below 100%", 
+                                "On Midpoint 100%", 
+                                "Above Midpoint", 
+                                "Above Midpoint w/o Comments"
+                            ]
+                            
+                            seleccion_conceptos = st.multiselect(
+                                "Select Categories to display below:", 
+                                options=opciones_conceptos, 
+                                default=[]
+                            )
+
+                        # --- 3. CLASIFICACIÓN DE CONCEPTOS (BN Category para la tabla) ---
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
                             val_bp = str(row.iloc[col_bp_idx]).strip()
                             
-                            # Validar si BN está en blanco o es 0
                             if pd.isna(val_bn) or str(val_bn).strip() == '' or str(val_bn).lower() == 'nan':
                                 return "0%"
                             
@@ -530,7 +612,6 @@ if file1 is not None and file2 is not None:
                             except ValueError:
                                 return "0%"
                                 
-                            # Validar si BP (Comments) está en blanco
                             bp_vacio = (val_bp == '' or val_bp.lower() in ['nan', 'none', 'null'])
                             
                             if bn_num == 0:
@@ -541,75 +622,22 @@ if file1 is not None and file2 is not None:
                                 return "On Midpoint 100%"
                             elif bn_num > 100:
                                 if bp_vacio:
-                                    return "Above Midpoint w/o Comments"  # Alerta Roja
+                                    return "Above Midpoint w/o Comments" 
                                 else:
-                                    return "Above Midpoint"  # Alerta Amarilla
-                            
+                                    return "Above Midpoint" 
                             return "0%"
 
-                        df_equity['BN_Category'] = df_equity.apply(clasificar_bn, axis=1)
+                        df_equity_full['BN_Category'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        # --- 2. FILTRO INTELIGENTE CON CONCEPTOS ---
-                        st.markdown("##### Filter by Percentage Categories")
-                        opciones_conceptos = [
-                            "0%", 
-                            "Below 100%", 
-                            "On Midpoint 100%", 
-                            "Above Midpoint", 
-                            "Above Midpoint w/o Comments"
-                        ]
-                        
-                        # AHORA INICIA SIN NINGUNA SELECCIÓN (default=[])
-                        seleccion_conceptos = st.multiselect(
-                            "Select Categories:", 
-                            options=opciones_conceptos, 
-                            default=[]
-                        )
-                        
-                        # Aplicar filtro visual
-                        if seleccion_conceptos:
-                            df_equity = df_equity[df_equity['BN_Category'].isin(seleccion_conceptos)]
-                        else:
-                            df_equity = df_equity.iloc[0:0] # Vacía la tabla si no hay nada seleccionado
-                        
-                        # --- 3. CÁLCULO DE VALORES DEL SUMMARY ---
-                        val_bl = pd.to_numeric(df_equity.iloc[:, col_bl_idx], errors='coerce').fillna(0)
-                        val_bn = pd.to_numeric(df_equity.iloc[:, col_bn_idx], errors='coerce').fillna(0)
-                        
-                        proposed_values = val_bl * (val_bn / 100)
-                        df_equity['Proposed Recommendation Value'] = proposed_values
-                        
-                        equity_budget = val_bl.sum()
-                        total_proposed = proposed_values.sum()
-                        variance = total_proposed - equity_budget
-                        
-                        if variance <= 0:
-                            status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
-                        else:
-                            status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
-                            
-                        # --- 4. RENDERIZADO DEL CUADRO DE DATOS (SUMMARY) ---
-                        st.markdown("### Equity Budget Summary")
-                        summary_html = f"""
-                        <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 20px;">
-                          <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Status (Variance)</th>
-                          </tr>
-                          <tr style="background-color: white;">
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${equity_budget:,.2f}</td>
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
-                          </tr>
-                        </table>
-                        """
-                        st.markdown(summary_html, unsafe_allow_html=True)
-                        
-                        # --- 5. LISTADO DETALLADO CON ALERTAS ROJAS Y AMARILLAS ---
+                        # --- 4. LISTADO DETALLADO ---
+                        st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
-                        st.write(f"Showing **{len(df_equity)}** employees based on your category filter.")
                         
+                        if seleccion_conceptos:
+                            df_equity_filtered = df_equity_full[df_equity_full['BN_Category'].isin(seleccion_conceptos)]
+                        else:
+                            df_equity_filtered = df_equity_full.iloc[0:0] 
+                            
                         def color_equity_row(row):
                             categoria = row.get('BN_Category', '')
                             if categoria == "Above Midpoint w/o Comments":
@@ -617,9 +645,13 @@ if file1 is not None and file2 is not None:
                             elif categoria == "Above Midpoint":
                                 return ['background-color: #ffffcc'] * len(row)  # Amarillo claro (Justificado)
                             return [''] * len(row)
-                            
-                        df_eq_styled = df_equity.style.apply(color_equity_row, axis=1)
-                        st.dataframe(df_eq_styled, use_container_width=True)
+                        
+                        if not df_equity_filtered.empty:
+                            st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
+                            df_eq_styled = df_equity_filtered.style.apply(color_equity_row, axis=1)
+                            st.dataframe(df_eq_styled, use_container_width=True)
+                        else:
+                            st.info("Select one or more categories above to view employee details in this table.")
 
                     else:
                         st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
