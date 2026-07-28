@@ -89,7 +89,6 @@ if file1 is not None and file2 is not None:
             def_subgroups = config.get("subgroups", [])
             def_potentials = config.get("potentials", [])
         else:
-            # Filtro por defecto para Potential si no se carga ninguna configuración
             def_potentials = [x for x in potential_options if x.strip().lower() in ['strategic few', 'high potential']]
 
         st.sidebar.markdown("---")
@@ -105,7 +104,6 @@ if file1 is not None and file2 is not None:
         def_subgroups = [x for x in def_subgroups if x in subgroup_options]
         def_potentials = [x for x in def_potentials if x in potential_options]
 
-        # Filtros en el orden solicitado
         selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
         selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
         selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
@@ -131,11 +129,6 @@ if file1 is not None and file2 is not None:
                 with open(ARCHIVO_FILTROS, 'w', encoding='utf-8') as f:
                     json.dump(st.session_state['memoria_filtros'], f)
                 st.sidebar.success(f"Filter '{nuevo_nombre}' saved successfully!")
-                
-                if hasattr(st, "rerun"):
-                    st.rerun()
-                elif hasattr(st, "experimental_rerun"):
-                    st.experimental_rerun()
             else:
                 st.sidebar.warning("Please enter a title before saving.")
 
@@ -161,49 +154,35 @@ if file1 is not None and file2 is not None:
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
-            # ====== CREACIÓN DE PESTAÑAS (TABS) PARA MANTENER LIMPIO EL DASHBOARD ======
+            # ====== CREACIÓN DE PESTAÑAS (TABS) ======
             tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
             
             # ==========================================
             #           TAB 1: SALARY PLANNING
             # ==========================================
             with tab_salary:
-                # --- COST SUMMARY TABLE ---
                 st.subheader("💰 Cost Summary")
                 
                 adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
                 promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-                
                 col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
                 col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
                 cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
                 cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
                 total_cost = cost_adj + cost_promo
-
                 sum_t = col_t_annual_usd.sum()
                 sum_au = col_au_new_annual_usd.sum()
                 
                 pct_adj_vs_total = (cost_adj / sum_t) * 100 if sum_t > 0 else 0
                 pct_promo_vs_total = (cost_promo / sum_t) * 100 if sum_t > 0 else 0
                 pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
-                
                 pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
                 cost_df = pd.DataFrame({
                     "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
-                    "Value": [
-                        f"${cost_adj:,.2f}",
-                        f"${cost_promo:,.2f}",
-                        f"${total_cost:,.2f}",
-                        f"{pct_incremento:,.2f}%"
-                    ],
-                    "% of Total Salary": [
-                        f"{pct_adj_vs_total:,.2f}%",
-                        f"{pct_promo_vs_total:,.2f}%",
-                        f"{pct_total_cost_vs_total:,.2f}%",
-                        "-"
-                    ]
+                    "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"{pct_incremento:,.2f}%"],
+                    "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", "-"]
                 })
                 
                 st.table(cost_df)
@@ -213,7 +192,6 @@ if file1 is not None and file2 is not None:
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
-                
                 solo_adj = (cond_adj & ~cond_promo)
                 solo_promo = (~cond_adj & cond_promo)
                 ambos = (cond_adj & cond_promo)
@@ -223,13 +201,10 @@ if file1 is not None and file2 is not None:
                 num_solo_promo = solo_promo.sum()
                 num_ambos = ambos.sum()
                 num_sin_mov = sin_mov.sum()
-                
                 total_personas = len(df_filtered)
                 num_movimientos = num_solo_adj + num_solo_promo + num_ambos
 
-                # --- CHARTS (2x3 GRID ARCHITECTURE) ---
                 st.subheader("📊 Graphical Summary")
-                
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -242,41 +217,33 @@ if file1 is not None and file2 is not None:
                             sizes = [num_movimientos, total_personas - num_movimientos]
                             labels = ['With Movement', 'No Movement']
                             colors = ['#ff9999', '#d3d3d3']
-                            
                             wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
                             leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                             ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                        
                         ax1.axis('equal') 
                         ax1.set_title('Overall Movement', fontweight='bold', pad=15)
                     else:
                         ax1.text(0.5, 0.5, "No data", ha='center', va='center')
-                        
                     st.pyplot(fig1)
 
                 with col2:
                     fig2, ax2 = plt.subplots(figsize=(7, 6))
-                    
                     raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                     raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
                     raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
-                    
                     sizes2 = [s for s in raw_sizes2 if s > 0]
                     labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
                     colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
-                    
                     total_chart2 = sum(sizes2)
                     
                     if total_chart2 > 0:
                         wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
                         leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
                         ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                        
                         ax2.axis('equal')
                         ax2.set_title('Movement Details', fontweight='bold', pad=15)
                     else:
                         ax2.text(0.5, 0.5, "No data", ha='center', va='center')
-                    
                     st.pyplot(fig2)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -284,35 +251,28 @@ if file1 is not None and file2 is not None:
 
                 with col3:
                     fig3, ax3 = plt.subplots(figsize=(7, 6))
-                    
                     df_adj = df_filtered[cond_adj].copy()
                     
                     if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
-                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned')
-                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].replace({'None Selected': 'No Reason Assigned'})
-                        
+                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned').replace({'None Selected': 'No Reason Assigned'})
                         reason_counts = df_adj['Adjustment Reason'].value_counts()
                         total_reasons = reason_counts.sum()
                         
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                            
                             wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
                             leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                             ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                            
                             ax3.axis('equal')
                             ax3.set_title('Adjustment Split (Reason)', fontweight='bold', pad=15)
                         else:
                             ax3.text(0.5, 0.5, "No valid data", ha='center', va='center')
                     else:
                         ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
-                    
                     st.pyplot(fig3)
 
                 with col4:
                     fig4, ax4 = plt.subplots(figsize=(7, 6))
-                    
                     df_pot_mov = df_filtered[tiene_movimiento].copy()
                     
                     if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
@@ -321,18 +281,15 @@ if file1 is not None and file2 is not None:
                         
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
-                            
                             wedges4, _ = ax4.pie(pot_counts, startangle=90, colors=colores_pot)
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
                             ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                            
                             ax4.axis('equal')
                             ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
                         else:
                             ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
                     else:
                         ax4.text(0.5, 0.5, "No movements to analyze for Potential", ha='center', va='center')
-                    
                     st.pyplot(fig4)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -340,28 +297,20 @@ if file1 is not None and file2 is not None:
 
                 with col5:
                     fig5, ax5 = plt.subplots(figsize=(7, 6))
-                    
                     col_w_idx = 22
                     col_ax_idx = 49
                     
                     if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_ax_idx):
                         col_w_name = df_filtered.columns[col_w_idx]
                         col_ax_name = df_filtered.columns[col_ax_idx]
-                        
                         data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
                         data_ax = df_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
                         
                         mapeo = {
-                            "Below Minimum": "Below Min",
-                            "Below Min": "Below Min",
-                            "1Q": "1Q",
-                            "2Q": "2Q",
-                            "3Q": "3Q",
-                            "4Q": "4Q",
-                            "AboveMax": "Above max",
-                            "Above max": "Above max"
+                            "Below Minimum": "Below Min", "Below Min": "Below Min",
+                            "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
+                            "AboveMax": "Above max", "Above max": "Above max"
                         }
-                        
                         data_w = data_w.replace(mapeo)
                         data_ax = data_ax.replace(mapeo)
                         
@@ -369,7 +318,6 @@ if file1 is not None and file2 is not None:
                         counts_ax = data_ax.value_counts()
                         
                         final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                        
                         val_w = [counts_w.get(c, 0) for c in final_order]
                         val_ax = [counts_ax.get(c, 0) for c in final_order]
                         
@@ -387,25 +335,19 @@ if file1 is not None and file2 is not None:
                         
                         ax5.set_xticks(x_pos)
                         ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
-                        
                         ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
-                        
                         ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
                         ax5.set_ylabel('Number of Employees')
-                        
                         ax5.set_ylim(0, max_y * 1.15)
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
-                        
                         fig5.tight_layout()
                     else:
                         ax5.text(0.5, 0.5, "Columns W or AX not found", ha='center', va='center')
-                        
                     st.pyplot(fig5)
 
                 with col6:
                     fig6, ax6 = plt.subplots(figsize=(7, 6))
-                    
                     df_gender_mov = df_filtered[tiene_movimiento].copy()
                     
                     if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
@@ -415,7 +357,6 @@ if file1 is not None and file2 is not None:
                         if total_gender > 0:
                             colores_gender = sns.color_palette("pastel", len(gender_counts))
                             bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
-                            
                             for bar in bars:
                                 yval = bar.get_height()
                                 pct = (yval / total_gender) * 100
@@ -424,23 +365,19 @@ if file1 is not None and file2 is not None:
                                 
                             ax6.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
                             ax6.set_ylabel('Number of Employees')
-                            
                             ax6.spines['top'].set_visible(False)
                             ax6.spines['right'].set_visible(False)
-                            
                             fig6.tight_layout()
                         else:
                             ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
                     else:
                         ax6.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
-                    
                     st.pyplot(fig6)
                 
                 st.markdown("---")
 
                 # --- DYNAMIC STAFF TABLE ---
                 st.subheader("👥 Employee Detailed List & Alerts")
-                
                 col_filt1, col_filt2 = st.columns(2)
                 
                 with col_filt1:
@@ -565,56 +502,90 @@ if file1 is not None and file2 is not None:
                 st.subheader("📈 Equity Planning")
                 st.info("This section displays data exclusively for employees eligible for stock (Column BJ = 'Yes').")
                 
-                # Índices correspondientes en Python (base 0)
+                # Índices correspondientes en Python
                 col_bj_idx = 61  # Stock Eligibility
                 col_bl_idx = 63  # Midpoint of stock Range
                 col_bn_idx = 65  # BN Column (Percentage)
+                col_bp_idx = 67  # BP Column (Comments)
                 
-                if len(df_filtered.columns) > col_bn_idx:
-                    # 1. Filtramos solo los elegibles a Stock ("Yes" en Col BJ)
+                if len(df_filtered.columns) > max(col_bn_idx, col_bp_idx):
                     mask_stock = df_filtered.iloc[:, col_bj_idx].astype(str).str.strip().str.lower() == 'yes'
                     df_equity = df_filtered[mask_stock].copy()
                     
                     if not df_equity.empty:
                         df_equity = df_equity.rename(columns={'Chief Name': 'Manager'})
                         
-                        # --- FILTRO ESPECÍFICO PARA COLUMNA BN ---
-                        col_bn_name = df_equity.columns[col_bn_idx]
-                        bn_unique_vals = sorted(df_equity.iloc[:, col_bn_idx].dropna().astype(str).unique().tolist())
+                        # --- 1. CLASIFICACIÓN DE CONCEPTOS (BN Category) ---
+                        def clasificar_bn(row):
+                            val_bn = row.iloc[col_bn_idx]
+                            val_bp = str(row.iloc[col_bp_idx]).strip()
+                            
+                            # Validar si BN está en blanco
+                            if pd.isna(val_bn) or str(val_bn).strip() == '' or str(val_bn).lower() == 'nan':
+                                return "Blank"
+                            
+                            try:
+                                bn_num = float(val_bn)
+                            except ValueError:
+                                return "Blank"
+                                
+                            # Validar si BP (Comments) está en blanco
+                            bp_vacio = (val_bp == '' or val_bp.lower() in ['nan', 'none', 'null'])
+                            
+                            if bn_num < 100:
+                                return "Below 100%"
+                            elif bn_num == 100:
+                                return "On Midpoint 100%"
+                            elif bn_num > 100:
+                                if bp_vacio:
+                                    return "Above Midpoint w/o Comments"  # Alerta Roja
+                                else:
+                                    return "Above Midpoint"  # Alerta Amarilla
+                            
+                            return "Blank"
+
+                        df_equity['BN_Category'] = df_equity.apply(clasificar_bn, axis=1)
                         
-                        selected_bn = st.multiselect(
-                            f"Filter by % ({col_bn_name}):", 
-                            options=bn_unique_vals, 
-                            default=bn_unique_vals
+                        # --- 2. FILTRO INTELIGENTE CON CONCEPTOS ---
+                        st.markdown("##### Filter by Percentage Categories")
+                        opciones_conceptos = [
+                            "Blank", 
+                            "Below 100%", 
+                            "On Midpoint 100%", 
+                            "Above Midpoint", 
+                            "Above Midpoint w/o Comments"
+                        ]
+                        
+                        seleccion_conceptos = st.multiselect(
+                            "Select Categories:", 
+                            options=opciones_conceptos, 
+                            default=opciones_conceptos
                         )
                         
-                        # Aplicar filtro de BN a la tabla temporal
-                        if selected_bn:
-                            df_equity = df_equity[df_equity.iloc[:, col_bn_idx].astype(str).isin(selected_bn)]
+                        # Aplicar filtro visual
+                        if seleccion_conceptos:
+                            df_equity = df_equity[df_equity['BN_Category'].isin(seleccion_conceptos)]
+                        else:
+                            df_equity = df_equity.iloc[0:0] # Vacía la tabla si no hay nada seleccionado
                         
-                        # --- CÁLCULO DE VALORES DEL SUMMARY ---
+                        # --- 3. CÁLCULO DE VALORES DEL SUMMARY ---
                         val_bl = pd.to_numeric(df_equity.iloc[:, col_bl_idx], errors='coerce').fillna(0)
                         val_bn = pd.to_numeric(df_equity.iloc[:, col_bn_idx], errors='coerce').fillna(0)
                         
-                        # Fórmula solicitada: Proposed = BL * (BN/100)
                         proposed_values = val_bl * (val_bn / 100)
                         df_equity['Proposed Recommendation Value'] = proposed_values
                         
                         equity_budget = val_bl.sum()
                         total_proposed = proposed_values.sum()
-                        
-                        # Diferencia vs Budget
                         variance = total_proposed - equity_budget
                         
-                        # Regla de color para el estatus
                         if variance <= 0:
                             status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
                         else:
                             status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
                             
-                        # --- RENDERIZADO DEL CUADRO DE DATOS (SUMMARY) ---
+                        # --- 4. RENDERIZADO DEL CUADRO DE DATOS (SUMMARY) ---
                         st.markdown("### Equity Budget Summary")
-                        
                         summary_html = f"""
                         <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 20px;">
                           <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
@@ -631,19 +602,16 @@ if file1 is not None and file2 is not None:
                         """
                         st.markdown(summary_html, unsafe_allow_html=True)
                         
-                        # --- LISTADO DETALLADO CON ALERTAS ---
+                        # --- 5. LISTADO DETALLADO CON ALERTAS ROJAS Y AMARILLAS ---
                         st.markdown("### 👥 Eligible Employees List")
-                        st.write(f"Showing **{len(df_equity)}** employees.")
+                        st.write(f"Showing **{len(df_equity)}** employees based on your category filter.")
                         
-                        # Función para colorear de amarillo si BN > 100
                         def color_equity_row(row):
-                            try:
-                                # Leemos el valor numérico de la columna BN
-                                current_bn = pd.to_numeric(row.iloc[col_bn_idx], errors='coerce')
-                                if pd.notna(current_bn) and current_bn > 100:
-                                    return ['background-color: #ffffcc'] * len(row)  # Amarillo claro
-                            except Exception:
-                                pass
+                            categoria = row.get('BN_Category', '')
+                            if categoria == "Above Midpoint w/o Comments":
+                                return ['background-color: #ffcccc'] * len(row)  # Rojo pastel (Sin justificar)
+                            elif categoria == "Above Midpoint":
+                                return ['background-color: #ffffcc'] * len(row)  # Amarillo claro (Justificado)
                             return [''] * len(row)
                             
                         df_eq_styled = df_equity.style.apply(color_equity_row, axis=1)
@@ -652,7 +620,7 @@ if file1 is not None and file2 is not None:
                     else:
                         st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
                 else:
-                    st.error("The uploaded file does not contain enough columns to process Equity Planning metrics (requires up to Column BN).")
+                    st.error("The uploaded file does not contain enough columns to process Equity Planning metrics (requires up to Column BP).")
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
