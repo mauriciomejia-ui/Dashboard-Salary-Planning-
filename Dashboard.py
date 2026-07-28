@@ -164,14 +164,12 @@ if file1 is not None and file2 is not None:
             # --- COST SUMMARY TABLE ---
             st.subheader("💰 Cost Summary")
             
-            # Obtenemos las variables base
             adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             
             col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
             col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # Cálculos de Costos
             cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
             cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
             total_cost = cost_adj + cost_promo
@@ -225,10 +223,8 @@ if file1 is not None and file2 is not None:
             # --- CHARTS (2x3 GRID ARCHITECTURE) ---
             st.subheader("📊 Graphical Summary")
             
-            # FILA 1 DE GRÁFICAS
             col1, col2 = st.columns(2)
             
-            # --- CHART 1: Overall Percentage ---
             with col1:
                 fig1, ax1 = plt.subplots(figsize=(7, 6))
                 if total_personas > 0:
@@ -251,7 +247,6 @@ if file1 is not None and file2 is not None:
                     
                 st.pyplot(fig1)
 
-            # --- CHART 2: Breakdown %Adjustment vs %GPromotion ---
             with col2:
                 fig2, ax2 = plt.subplots(figsize=(7, 6))
                 
@@ -277,11 +272,9 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig2)
 
-            # FILA 2 DE GRÁFICAS
             st.markdown("<br>", unsafe_allow_html=True)
             col3, col4 = st.columns(2)
 
-            # --- CHART 3: Adjustment Reason ---
             with col3:
                 fig3, ax3 = plt.subplots(figsize=(7, 6))
                 
@@ -310,7 +303,6 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig3)
 
-            # --- CHART 4: Potential (SOLAMENTE para los que tienen movimiento) ---
             with col4:
                 fig4, ax4 = plt.subplots(figsize=(7, 6))
                 
@@ -336,15 +328,13 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig4)
 
-            # FILA 3 DE GRÁFICAS
             st.markdown("<br>", unsafe_allow_html=True)
             col5, col6 = st.columns(2)
 
-            # --- CHART 5: Distribution vs Columns W and AW ---
+            # --- CHART 5 CORREGIDA (HIPOS DISTRIBUTION) ---
             with col5:
                 fig5, ax5 = plt.subplots(figsize=(7, 6))
                 
-                # Índices de columnas
                 col_w_idx = 22
                 col_aw_idx = 48
                 
@@ -380,16 +370,25 @@ if file1 is not None and file2 is not None:
                         
                         max_y = max(max(val_w), max(val_aw))
                         
+                        # --- MEJORA VISUAL: Etiquetas de valores sobre las barras ---
+                        ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
+                        ax5.bar_label(bars_aw, padding=3, fontsize=9, color='#333333')
+                        
                         ax5.set_xticks(x_pos)
-                        ax5.set_xticklabels(final_order, rotation=45, ha='right')
-                        ax5.legend(loc="upper right", fontsize=9)
+                        ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
+                        
+                        # --- MEJORA VISUAL: Mover la leyenda afuera (abajo) ---
+                        ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
                         
                         ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
                         ax5.set_ylabel('Number of Employees')
                         
-                        ax5.set_ylim(0, max_y * 1.20)
+                        ax5.set_ylim(0, max_y * 1.15)
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
+                        
+                        # --- MEJORA VISUAL: Auto-ajuste para evitar que se encimen textos ---
+                        fig5.tight_layout()
                     else:
                         ax5.text(0.5, 0.5, "No data matches these categories", ha='center', va='center')
                 else:
@@ -397,7 +396,6 @@ if file1 is not None and file2 is not None:
                     
                 st.pyplot(fig5)
 
-            # --- CHART 6: Gender Split Bar Chart ---
             with col6:
                 fig6, ax6 = plt.subplots(figsize=(7, 6))
                 
@@ -422,6 +420,8 @@ if file1 is not None and file2 is not None:
                         
                         ax6.spines['top'].set_visible(False)
                         ax6.spines['right'].set_visible(False)
+                        
+                        fig6.tight_layout()
                     else:
                         ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
                 else:
@@ -434,7 +434,6 @@ if file1 is not None and file2 is not None:
             # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
             st.subheader("👥 Employee Detailed List & Alerts")
             
-            # FILTROS DE LA TABLA
             col_filt1, col_filt2 = st.columns(2)
             
             with col_filt1:
@@ -445,7 +444,6 @@ if file1 is not None and file2 is not None:
                 )
                 
             with col_filt2:
-                # FILTRO DE ALERTAS (COLORES)
                 opcion_alerta = st.selectbox(
                     "2. Filter by Alerts (Colors):",
                     [
@@ -457,7 +455,6 @@ if file1 is not None and file2 is not None:
                     ]
                 )
             
-            # 1. Apply Movement Type Mask
             if opcion_detalle == "Adjustment Only":
                 mask = solo_adj
             elif opcion_detalle == "Promotion Only":
@@ -472,7 +469,7 @@ if file1 is not None and file2 is not None:
             df_detalle = df_filtered[mask].copy()
             df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
             
-            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS EN COLUMNAS (J, Z, AB, AC, AF, AH, AI, AK, AL) ---
+            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS ---
             FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
             def evaluar_alertas(row):
@@ -523,25 +520,22 @@ if file1 is not None and file2 is not None:
                         flag_rojo = True
                         comentarios.append("AI supera el valor de J y AK > 0")
                     
-                    # Asignar colores por jerarquía
                     if flag_rojo:
-                        color = '#ffcccc' # Rojo pastel
+                        color = '#ffcccc'
                     elif flag_naranja:
-                        color = '#ffe4b5' # Naranja pastel
+                        color = '#ffe4b5'
                     elif flag_amarillo:
-                        color = '#ffffcc' # Amarillo pastel
+                        color = '#ffffcc'
                         
                 except Exception:
                     pass
                 
                 return pd.Series([", ".join(comentarios), color])
 
-            # Aplicar motor de alertas
             res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
             df_detalle['Comments'] = res_alertas[0]
             df_detalle['RowColor'] = res_alertas[1]
             
-            # 2. Apply Alerts (Color) Filter
             if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
                 df_detalle = df_detalle[df_detalle['RowColor'] != '']
             elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
@@ -551,7 +545,6 @@ if file1 is not None and file2 is not None:
             elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
                 df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
             
-            # --- RENDERIZAR TABLA COLOREADA ---
             st.write(f"Showing **{len(df_detalle)}** matching employees.")
             
             def aplicar_color_fila(row, colores_serie):
