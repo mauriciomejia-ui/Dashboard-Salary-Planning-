@@ -89,7 +89,8 @@ if file1 is not None and file2 is not None:
             def_subgroups = config.get("subgroups", [])
             def_potentials = config.get("potentials", [])
         else:
-            def_potentials = [x for x in potential_options if x.strip().lower() in ['strategic few', 'high potential']]
+            # AHORA INICIA SIEMPRE VACÍO POR DEFECTO
+            def_potentials = []
 
         st.sidebar.markdown("---")
         
