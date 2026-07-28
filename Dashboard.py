@@ -89,7 +89,7 @@ if file1 is not None and file2 is not None:
             def_subgroups = config.get("subgroups", [])
             def_potentials = config.get("potentials", [])
         else:
-            # AHORA INICIA SIEMPRE VACÍO POR DEFECTO
+            # SIEMPRE VACÍO POR DEFECTO
             def_potentials = []
 
         st.sidebar.markdown("---")
@@ -559,10 +559,11 @@ if file1 is not None and file2 is not None:
                             "Above Midpoint w/o Comments"
                         ]
                         
+                        # AHORA INICIA SIN NINGUNA SELECCIÓN (default=[])
                         seleccion_conceptos = st.multiselect(
                             "Select Categories:", 
                             options=opciones_conceptos, 
-                            default=opciones_conceptos
+                            default=[]
                         )
                         
                         # Aplicar filtro visual
