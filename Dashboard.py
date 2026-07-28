@@ -161,414 +161,499 @@ if file1 is not None and file2 is not None:
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
-            # --- COST SUMMARY TABLE ---
-            st.subheader("💰 Cost Summary")
+            # ====== CREACIÓN DE PESTAÑAS (TABS) PARA MANTENER LIMPIO EL DASHBOARD ======
+            tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
             
-            # Obtenemos las variables base
-            adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            
-            col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
-            col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+            # ==========================================
+            #           TAB 1: SALARY PLANNING
+            # ==========================================
+            with tab_salary:
+                # --- COST SUMMARY TABLE ---
+                st.subheader("💰 Cost Summary")
+                
+                adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+                promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+                
+                col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
+                col_au_new_annual_usd = pd.to_numeric(df_filtered.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
 
-            # Cálculos de Costos
-            cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
-            cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
-            total_cost = cost_adj + cost_promo
+                cost_adj = ((adj_pct / 100) * col_t_annual_usd)[adj_pct > 0].sum()
+                cost_promo = ((promo_pct / 100) * col_t_annual_usd)[promo_pct > 0].sum()
+                total_cost = cost_adj + cost_promo
 
-            sum_t = col_t_annual_usd.sum()
-            sum_au = col_au_new_annual_usd.sum()
-            
-            pct_adj_vs_total = (cost_adj / sum_t) * 100 if sum_t > 0 else 0
-            pct_promo_vs_total = (cost_promo / sum_t) * 100 if sum_t > 0 else 0
-            pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
-            
-            pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
+                sum_t = col_t_annual_usd.sum()
+                sum_au = col_au_new_annual_usd.sum()
+                
+                pct_adj_vs_total = (cost_adj / sum_t) * 100 if sum_t > 0 else 0
+                pct_promo_vs_total = (cost_promo / sum_t) * 100 if sum_t > 0 else 0
+                pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
+                
+                pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-            cost_df = pd.DataFrame({
-                "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
-                "Value": [
-                    f"${cost_adj:,.2f}",
-                    f"${cost_promo:,.2f}",
-                    f"${total_cost:,.2f}",
-                    f"{pct_incremento:,.2f}%"
-                ],
-                "% of Total Salary": [
-                    f"{pct_adj_vs_total:,.2f}%",
-                    f"{pct_promo_vs_total:,.2f}%",
-                    f"{pct_total_cost_vs_total:,.2f}%",
-                    "-"
-                ]
-            })
-            
-            st.table(cost_df)
-            st.markdown("---")
-
-            # --- PREPARE DATA FOR CHARTS ---
-            cond_adj = adj_pct > 0
-            cond_promo = promo_pct > 0
-            tiene_movimiento = cond_adj | cond_promo
-            
-            solo_adj = (cond_adj & ~cond_promo)
-            solo_promo = (~cond_adj & cond_promo)
-            ambos = (cond_adj & cond_promo)
-            sin_mov = (~cond_adj & ~cond_promo)
-            
-            num_solo_adj = solo_adj.sum()
-            num_solo_promo = solo_promo.sum()
-            num_ambos = ambos.sum()
-            num_sin_mov = sin_mov.sum()
-            
-            total_personas = len(df_filtered)
-            num_movimientos = num_solo_adj + num_solo_promo + num_ambos
-
-            # --- CHARTS (2x3 GRID ARCHITECTURE) ---
-            st.subheader("📊 Graphical Summary")
-            
-            # FILA 1 DE GRÁFICAS
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig1, ax1 = plt.subplots(figsize=(7, 6))
-                if total_personas > 0:
-                    if num_movimientos == 0:
-                        ax1.pie([100], colors=['#d3d3d3'], startangle=90)
-                        ax1.legend(["No Movement (100%)"], loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                    else:
-                        sizes = [num_movimientos, total_personas - num_movimientos]
-                        labels = ['With Movement', 'No Movement']
-                        colors = ['#ff9999', '#d3d3d3']
-                        
-                        wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
-                        leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
-                        ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                    
-                    ax1.axis('equal') 
-                    ax1.set_title('Overall Movement', fontweight='bold', pad=15)
-                else:
-                    ax1.text(0.5, 0.5, "No data", ha='center', va='center')
-                    
-                st.pyplot(fig1)
-
-            with col2:
-                fig2, ax2 = plt.subplots(figsize=(7, 6))
-                
-                raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
-                raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
-                raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
-                
-                sizes2 = [s for s in raw_sizes2 if s > 0]
-                labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
-                colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
-                
-                total_chart2 = sum(sizes2)
-                
-                if total_chart2 > 0:
-                    wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
-                    leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
-                    ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                    
-                    ax2.axis('equal')
-                    ax2.set_title('Movement Details', fontweight='bold', pad=15)
-                else:
-                    ax2.text(0.5, 0.5, "No data", ha='center', va='center')
-                
-                st.pyplot(fig2)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            col3, col4 = st.columns(2)
-
-            with col3:
-                fig3, ax3 = plt.subplots(figsize=(7, 6))
-                
-                df_adj = df_filtered[cond_adj].copy()
-                
-                if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
-                    df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned')
-                    df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].replace({'None Selected': 'No Reason Assigned'})
-                    
-                    reason_counts = df_adj['Adjustment Reason'].value_counts()
-                    total_reasons = reason_counts.sum()
-                    
-                    if total_reasons > 0:
-                        colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                        
-                        wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
-                        leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
-                        ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                        
-                        ax3.axis('equal')
-                        ax3.set_title('Adjustment Split (Reason)', fontweight='bold', pad=15)
-                    else:
-                        ax3.text(0.5, 0.5, "No valid data", ha='center', va='center')
-                else:
-                    ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
-                
-                st.pyplot(fig3)
-
-            with col4:
-                fig4, ax4 = plt.subplots(figsize=(7, 6))
-                
-                df_pot_mov = df_filtered[tiene_movimiento].copy()
-                
-                if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
-                    pot_counts = df_pot_mov['Potential'].value_counts()
-                    total_pot = pot_counts.sum()
-                    
-                    if total_pot > 0:
-                        colores_pot = sns.color_palette("Set3", len(pot_counts))
-                        
-                        wedges4, _ = ax4.pie(pot_counts, startangle=90, colors=colores_pot)
-                        leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
-                        ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                        
-                        ax4.axis('equal')
-                        ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
-                    else:
-                        ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
-                else:
-                    ax4.text(0.5, 0.5, "No movements to analyze for Potential", ha='center', va='center')
-                
-                st.pyplot(fig4)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            col5, col6 = st.columns(2)
-
-            # --- CHART 5 CORREGIDA (HIPOS DISTRIBUTION) ---
-            with col5:
-                fig5, ax5 = plt.subplots(figsize=(7, 6))
-                
-                # Índices de columnas (W = 22, AX = 49)
-                col_w_idx = 22
-                col_ax_idx = 49
-                
-                if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_ax_idx):
-                    col_w_name = df_filtered.columns[col_w_idx]
-                    col_ax_name = df_filtered.columns[col_ax_idx]
-                    
-                    data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
-                    data_ax = df_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
-                    
-                    # Mapeo estandarizador para empatar con el orden solicitado
-                    mapeo = {
-                        "Below Minimum": "Below Min",
-                        "Below Min": "Below Min",
-                        "1Q": "1Q",
-                        "2Q": "2Q",
-                        "3Q": "3Q",
-                        "4Q": "4Q",
-                        "AboveMax": "Above max",
-                        "Above max": "Above max"
-                    }
-                    
-                    data_w = data_w.replace(mapeo)
-                    data_ax = data_ax.replace(mapeo)
-                    
-                    counts_w = data_w.value_counts()
-                    counts_ax = data_ax.value_counts()
-                    
-                    # ORDEN ESTRICTO SIN IMPORTAR FILTROS
-                    final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                    
-                    val_w = [counts_w.get(c, 0) for c in final_order]
-                    val_ax = [counts_ax.get(c, 0) for c in final_order]
-                    
-                    x_pos = np.arange(len(final_order))
-                    ancho_barra = 0.35
-                    
-                    bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
-                    bars_ax = ax5.bar(x_pos + ancho_barra/2, val_ax, ancho_barra, label=str(col_ax_name)[:20], color='#87cefa')
-                    
-                    max_y = max(max(val_w, default=0), max(val_ax, default=0))
-                    if max_y == 0: 
-                        max_y = 1 # Prevenir division por 0 en la gráfica si todo está vacío
-                    
-                    ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
-                    ax5.bar_label(bars_ax, padding=3, fontsize=9, color='#333333')
-                    
-                    ax5.set_xticks(x_pos)
-                    ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
-                    
-                    ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
-                    
-                    ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
-                    ax5.set_ylabel('Number of Employees')
-                    
-                    ax5.set_ylim(0, max_y * 1.15)
-                    ax5.spines['top'].set_visible(False)
-                    ax5.spines['right'].set_visible(False)
-                    
-                    fig5.tight_layout()
-                else:
-                    ax5.text(0.5, 0.5, "Columns W or AX not found", ha='center', va='center')
-                    
-                st.pyplot(fig5)
-
-            with col6:
-                fig6, ax6 = plt.subplots(figsize=(7, 6))
-                
-                df_gender_mov = df_filtered[tiene_movimiento].copy()
-                
-                if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
-                    gender_counts = df_gender_mov['Gender'].value_counts()
-                    total_gender = gender_counts.sum()
-                    
-                    if total_gender > 0:
-                        colores_gender = sns.color_palette("pastel", len(gender_counts))
-                        bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
-                        
-                        for bar in bars:
-                            yval = bar.get_height()
-                            pct = (yval / total_gender) * 100
-                            ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
-                                     f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
-                            
-                        ax6.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
-                        ax6.set_ylabel('Number of Employees')
-                        
-                        ax6.spines['top'].set_visible(False)
-                        ax6.spines['right'].set_visible(False)
-                        
-                        fig6.tight_layout()
-                    else:
-                        ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
-                else:
-                    ax6.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
-                
-                st.pyplot(fig6)
-            
-            st.markdown("---")
-
-            # --- DYNAMIC STAFF TABLE (BELOW CHARTS) ---
-            st.subheader("👥 Employee Detailed List & Alerts")
-            
-            col_filt1, col_filt2 = st.columns(2)
-            
-            with col_filt1:
-                opcion_detalle = st.radio(
-                    "1. Filter by Movement Type:",
-                    ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
-                    horizontal=True
-                )
-                
-            with col_filt2:
-                opcion_alerta = st.selectbox(
-                    "2. Filter by Alerts (Colors):",
-                    [
-                        "Show All", 
-                        "⚠️ Show Only with Alerts (Any Color)", 
-                        "🔴 Red Alerts Only (Critical)", 
-                        "🟠 Orange Alerts Only (Warning)", 
-                        "🟡 Yellow Alerts Only (Notice)"
+                cost_df = pd.DataFrame({
+                    "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
+                    "Value": [
+                        f"${cost_adj:,.2f}",
+                        f"${cost_promo:,.2f}",
+                        f"${total_cost:,.2f}",
+                        f"{pct_incremento:,.2f}%"
+                    ],
+                    "% of Total Salary": [
+                        f"{pct_adj_vs_total:,.2f}%",
+                        f"{pct_promo_vs_total:,.2f}%",
+                        f"{pct_total_cost_vs_total:,.2f}%",
+                        "-"
                     ]
-                )
-            
-            if opcion_detalle == "Adjustment Only":
-                mask = solo_adj
-            elif opcion_detalle == "Promotion Only":
-                mask = solo_promo
-            elif opcion_detalle == "Both":
-                mask = ambos
-            elif opcion_detalle == "No Movement":
-                mask = sin_mov
-            else:
-                mask = pd.Series(True, index=df_filtered.index)
+                })
                 
-            df_detalle = df_filtered[mask].copy()
-            df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
-            
-            # --- EVALUACIÓN AUTOMÁTICA DE ALERTAS ---
-            FECHA_ACTUAL = pd.to_datetime('2026-07-23')
+                st.table(cost_df)
+                st.markdown("---")
 
-            def evaluar_alertas(row):
-                comentarios = []
-                color = ''
+                # --- PREPARE DATA FOR CHARTS ---
+                cond_adj = adj_pct > 0
+                cond_promo = promo_pct > 0
+                tiene_movimiento = cond_adj | cond_promo
                 
-                try:
-                    val_j = pd.to_numeric(row.iloc[9], errors='coerce') if len(row) > 9 else 0
-                    val_z = pd.to_datetime(row.iloc[25], errors='coerce') if len(row) > 25 else pd.NaT
-                    val_ab = pd.to_numeric(row.iloc[27], errors='coerce') if len(row) > 27 else 0
-                    val_ac = pd.to_numeric(row.iloc[28], errors='coerce') if len(row) > 28 else 0
-                    val_af = pd.to_numeric(row.iloc[31], errors='coerce') if len(row) > 31 else 0
-                    val_ah = str(row.iloc[33]).strip() if len(row) > 33 else ""
-                    val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
-                    val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
-                    
-                    val_al_raw = str(row.iloc[37]).strip() if len(row) > 37 else ""
-                    al_vacio = val_al_raw == "" or val_al_raw.lower() in ['nan', 'nat', 'none']
-                    
-                    flag_rojo = False
-                    flag_naranja = False
-                    flag_amarillo = False
-                    
-                    # 1. ORANGE: 0.01 < AF < 1 AND (AB > 0 OR AC > 0) AND Z <= 6 meses
-                    if pd.notna(val_z):
-                        delta_dias = abs((FECHA_ACTUAL - val_z).days)
-                        if (0.01 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
-                            flag_naranja = True
-                            comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
+                solo_adj = (cond_adj & ~cond_promo)
+                solo_promo = (~cond_adj & cond_promo)
+                ambos = (cond_adj & cond_promo)
+                sin_mov = (~cond_adj & ~cond_promo)
+                
+                num_solo_adj = solo_adj.sum()
+                num_solo_promo = solo_promo.sum()
+                num_ambos = ambos.sum()
+                num_sin_mov = sin_mov.sum()
+                
+                total_personas = len(df_filtered)
+                num_movimientos = num_solo_adj + num_solo_promo + num_ambos
+
+                # --- CHARTS (2x3 GRID ARCHITECTURE) ---
+                st.subheader("📊 Graphical Summary")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig1, ax1 = plt.subplots(figsize=(7, 6))
+                    if total_personas > 0:
+                        if num_movimientos == 0:
+                            ax1.pie([100], colors=['#d3d3d3'], startangle=90)
+                            ax1.legend(["No Movement (100%)"], loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                        else:
+                            sizes = [num_movimientos, total_personas - num_movimientos]
+                            labels = ['With Movement', 'No Movement']
+                            colors = ['#ff9999', '#d3d3d3']
                             
-                    # 2. YELLOW: AF > 0 AND AH == "None Selected"
-                    if val_af > 0 and val_ah == "None Selected":
-                        flag_amarillo = True
-                        comentarios.append("Adjustment con 'None Selected'")
+                            wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
+                            leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
+                            ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
-                    # 3. YELLOW: (AK > 0 y AK < 6) OR AK > 15
-                    if (0 < val_ak < 6) or (val_ak > 15):
-                        flag_amarillo = True
-                        comentarios.append("Valor AK fuera de rango recomendado")
+                        ax1.axis('equal') 
+                        ax1.set_title('Overall Movement', fontweight='bold', pad=15)
+                    else:
+                        ax1.text(0.5, 0.5, "No data", ha='center', va='center')
                         
-                    # 4. YELLOW: AK > 0 y Columna AL está vacía
-                    if val_ak > 0 and al_vacio:
-                        flag_amarillo = True
-                        comentarios.append("AK > 0 pero Columna AL está vacía")
-                        
-                    # 5. RED: AI > J y AK > 0
-                    if val_ai > val_j and val_ak > 0:
-                        flag_rojo = True
-                        comentarios.append("AI supera el valor de J y AK > 0")
+                    st.pyplot(fig1)
+
+                with col2:
+                    fig2, ax2 = plt.subplots(figsize=(7, 6))
                     
-                    if flag_rojo:
-                        color = '#ffcccc'
-                    elif flag_naranja:
-                        color = '#ffe4b5'
-                    elif flag_amarillo:
-                        color = '#ffffcc'
+                    raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
+                    raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
+                    raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
+                    
+                    sizes2 = [s for s in raw_sizes2 if s > 0]
+                    labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
+                    colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
+                    
+                    total_chart2 = sum(sizes2)
+                    
+                    if total_chart2 > 0:
+                        wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
+                        leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
+                        ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
-                except Exception:
-                    pass
-                
-                return pd.Series([", ".join(comentarios), color])
+                        ax2.axis('equal')
+                        ax2.set_title('Movement Details', fontweight='bold', pad=15)
+                    else:
+                        ax2.text(0.5, 0.5, "No data", ha='center', va='center')
+                    
+                    st.pyplot(fig2)
 
-            res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
-            df_detalle['Comments'] = res_alertas[0]
-            df_detalle['RowColor'] = res_alertas[1]
-            
-            if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
-                df_detalle = df_detalle[df_detalle['RowColor'] != '']
-            elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
-                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
-            elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
-                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
-            elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
-                df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
-            
-            st.write(f"Showing **{len(df_detalle)}** matching employees.")
-            
-            def aplicar_color_fila(row, colores_serie):
-                color_hex = colores_serie.loc[row.name]
-                css = f"background-color: {color_hex}" if color_hex else ""
-                return [css] * len(row)
+                st.markdown("<br>", unsafe_allow_html=True)
+                col3, col4 = st.columns(2)
 
-            if not df_detalle.empty:
-                serie_colores = df_detalle['RowColor']
-                df_visual = df_detalle.drop(columns=['RowColor'])
+                with col3:
+                    fig3, ax3 = plt.subplots(figsize=(7, 6))
+                    
+                    df_adj = df_filtered[cond_adj].copy()
+                    
+                    if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
+                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned')
+                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].replace({'None Selected': 'No Reason Assigned'})
+                        
+                        reason_counts = df_adj['Adjustment Reason'].value_counts()
+                        total_reasons = reason_counts.sum()
+                        
+                        if total_reasons > 0:
+                            colores_motivos = sns.color_palette("pastel", len(reason_counts))
+                            
+                            wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
+                            leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
+                            ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                            
+                            ax3.axis('equal')
+                            ax3.set_title('Adjustment Split (Reason)', fontweight='bold', pad=15)
+                        else:
+                            ax3.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                    else:
+                        ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
+                    
+                    st.pyplot(fig3)
+
+                with col4:
+                    fig4, ax4 = plt.subplots(figsize=(7, 6))
+                    
+                    df_pot_mov = df_filtered[tiene_movimiento].copy()
+                    
+                    if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
+                        pot_counts = df_pot_mov['Potential'].value_counts()
+                        total_pot = pot_counts.sum()
+                        
+                        if total_pot > 0:
+                            colores_pot = sns.color_palette("Set3", len(pot_counts))
+                            
+                            wedges4, _ = ax4.pie(pot_counts, startangle=90, colors=colores_pot)
+                            leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
+                            ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                            
+                            ax4.axis('equal')
+                            ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
+                        else:
+                            ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                    else:
+                        ax4.text(0.5, 0.5, "No movements to analyze for Potential", ha='center', va='center')
+                    
+                    st.pyplot(fig4)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                col5, col6 = st.columns(2)
+
+                with col5:
+                    fig5, ax5 = plt.subplots(figsize=(7, 6))
+                    
+                    col_w_idx = 22
+                    col_ax_idx = 49
+                    
+                    if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_ax_idx):
+                        col_w_name = df_filtered.columns[col_w_idx]
+                        col_ax_name = df_filtered.columns[col_ax_idx]
+                        
+                        data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
+                        data_ax = df_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
+                        
+                        mapeo = {
+                            "Below Minimum": "Below Min",
+                            "Below Min": "Below Min",
+                            "1Q": "1Q",
+                            "2Q": "2Q",
+                            "3Q": "3Q",
+                            "4Q": "4Q",
+                            "AboveMax": "Above max",
+                            "Above max": "Above max"
+                        }
+                        
+                        data_w = data_w.replace(mapeo)
+                        data_ax = data_ax.replace(mapeo)
+                        
+                        counts_w = data_w.value_counts()
+                        counts_ax = data_ax.value_counts()
+                        
+                        final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
+                        
+                        val_w = [counts_w.get(c, 0) for c in final_order]
+                        val_ax = [counts_ax.get(c, 0) for c in final_order]
+                        
+                        x_pos = np.arange(len(final_order))
+                        ancho_barra = 0.35
+                        
+                        bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
+                        bars_ax = ax5.bar(x_pos + ancho_barra/2, val_ax, ancho_barra, label=str(col_ax_name)[:20], color='#87cefa')
+                        
+                        max_y = max(max(val_w, default=0), max(val_ax, default=0))
+                        if max_y == 0: max_y = 1
+                        
+                        ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
+                        ax5.bar_label(bars_ax, padding=3, fontsize=9, color='#333333')
+                        
+                        ax5.set_xticks(x_pos)
+                        ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
+                        
+                        ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
+                        
+                        ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
+                        ax5.set_ylabel('Number of Employees')
+                        
+                        ax5.set_ylim(0, max_y * 1.15)
+                        ax5.spines['top'].set_visible(False)
+                        ax5.spines['right'].set_visible(False)
+                        
+                        fig5.tight_layout()
+                    else:
+                        ax5.text(0.5, 0.5, "Columns W or AX not found", ha='center', va='center')
+                        
+                    st.pyplot(fig5)
+
+                with col6:
+                    fig6, ax6 = plt.subplots(figsize=(7, 6))
+                    
+                    df_gender_mov = df_filtered[tiene_movimiento].copy()
+                    
+                    if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
+                        gender_counts = df_gender_mov['Gender'].value_counts()
+                        total_gender = gender_counts.sum()
+                        
+                        if total_gender > 0:
+                            colores_gender = sns.color_palette("pastel", len(gender_counts))
+                            bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
+                            
+                            for bar in bars:
+                                yval = bar.get_height()
+                                pct = (yval / total_gender) * 100
+                                ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
+                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                                
+                            ax6.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
+                            ax6.set_ylabel('Number of Employees')
+                            
+                            ax6.spines['top'].set_visible(False)
+                            ax6.spines['right'].set_visible(False)
+                            
+                            fig6.tight_layout()
+                        else:
+                            ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                    else:
+                        ax6.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
+                    
+                    st.pyplot(fig6)
                 
-                df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
-                st.dataframe(df_estilizado, use_container_width=True)
-            else:
-                st.info("No employees match the selected table filters.")
+                st.markdown("---")
+
+                # --- DYNAMIC STAFF TABLE ---
+                st.subheader("👥 Employee Detailed List & Alerts")
                 
+                col_filt1, col_filt2 = st.columns(2)
+                
+                with col_filt1:
+                    opcion_detalle = st.radio(
+                        "1. Filter by Movement Type:",
+                        ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
+                        horizontal=True,
+                        key='rad_mov'
+                    )
+                    
+                with col_filt2:
+                    opcion_alerta = st.selectbox(
+                        "2. Filter by Alerts (Colors):",
+                        [
+                            "Show All", 
+                            "⚠️ Show Only with Alerts (Any Color)", 
+                            "🔴 Red Alerts Only (Critical)", 
+                            "🟠 Orange Alerts Only (Warning)", 
+                            "🟡 Yellow Alerts Only (Notice)"
+                        ],
+                        key='sel_alert'
+                    )
+                
+                if opcion_detalle == "Adjustment Only":
+                    mask = solo_adj
+                elif opcion_detalle == "Promotion Only":
+                    mask = solo_promo
+                elif opcion_detalle == "Both":
+                    mask = ambos
+                elif opcion_detalle == "No Movement":
+                    mask = sin_mov
+                else:
+                    mask = pd.Series(True, index=df_filtered.index)
+                    
+                df_detalle = df_filtered[mask].copy()
+                df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
+                
+                FECHA_ACTUAL = pd.to_datetime('2026-07-23')
+
+                def evaluar_alertas(row):
+                    comentarios = []
+                    color = ''
+                    try:
+                        val_j = pd.to_numeric(row.iloc[9], errors='coerce') if len(row) > 9 else 0
+                        val_z = pd.to_datetime(row.iloc[25], errors='coerce') if len(row) > 25 else pd.NaT
+                        val_ab = pd.to_numeric(row.iloc[27], errors='coerce') if len(row) > 27 else 0
+                        val_ac = pd.to_numeric(row.iloc[28], errors='coerce') if len(row) > 28 else 0
+                        val_af = pd.to_numeric(row.iloc[31], errors='coerce') if len(row) > 31 else 0
+                        val_ah = str(row.iloc[33]).strip() if len(row) > 33 else ""
+                        val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
+                        val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
+                        
+                        val_al_raw = str(row.iloc[37]).strip() if len(row) > 37 else ""
+                        al_vacio = val_al_raw == "" or val_al_raw.lower() in ['nan', 'nat', 'none']
+                        
+                        flag_rojo = False
+                        flag_naranja = False
+                        flag_amarillo = False
+                        
+                        if pd.notna(val_z):
+                            delta_dias = abs((FECHA_ACTUAL - val_z).days)
+                            if (0.01 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
+                                flag_naranja = True
+                                comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
+                                
+                        if val_af > 0 and val_ah == "None Selected":
+                            flag_amarillo = True
+                            comentarios.append("Adjustment con 'None Selected'")
+                            
+                        if (0 < val_ak < 6) or (val_ak > 15):
+                            flag_amarillo = True
+                            comentarios.append("Valor AK fuera de rango recomendado")
+                            
+                        if val_ak > 0 and al_vacio:
+                            flag_amarillo = True
+                            comentarios.append("AK > 0 pero Columna AL está vacía")
+                            
+                        if val_ai > val_j and val_ak > 0:
+                            flag_rojo = True
+                            comentarios.append("AI supera el valor de J y AK > 0")
+                        
+                        if flag_rojo: color = '#ffcccc'
+                        elif flag_naranja: color = '#ffe4b5'
+                        elif flag_amarillo: color = '#ffffcc'
+                    except Exception:
+                        pass
+                    return pd.Series([", ".join(comentarios), color])
+
+                res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
+                df_detalle['Comments'] = res_alertas[0]
+                df_detalle['RowColor'] = res_alertas[1]
+                
+                if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
+                    df_detalle = df_detalle[df_detalle['RowColor'] != '']
+                elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
+                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
+                elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
+                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
+                elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
+                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
+                
+                st.write(f"Showing **{len(df_detalle)}** matching employees.")
+                
+                def aplicar_color_fila(row, colores_serie):
+                    color_hex = colores_serie.loc[row.name]
+                    css = f"background-color: {color_hex}" if color_hex else ""
+                    return [css] * len(row)
+
+                if not df_detalle.empty:
+                    serie_colores = df_detalle['RowColor']
+                    df_visual = df_detalle.drop(columns=['RowColor'])
+                    df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
+                    st.dataframe(df_estilizado, use_container_width=True)
+                else:
+                    st.info("No employees match the selected table filters.")
+
+
+            # ==========================================
+            #           TAB 2: EQUITY PLANNING
+            # ==========================================
+            with tab_equity:
+                st.subheader("📈 Equity Planning")
+                st.info("This section displays data exclusively for employees eligible for stock (Column BJ = 'Yes').")
+                
+                # Índices correspondientes en Python (base 0)
+                col_bj_idx = 61  # Stock Eligibility
+                col_bl_idx = 63  # Midpoint of stock Range
+                col_bn_idx = 65  # BN Column (Percentage)
+                
+                if len(df_filtered.columns) > col_bn_idx:
+                    # 1. Filtramos solo los elegibles a Stock ("Yes" en Col BJ)
+                    mask_stock = df_filtered.iloc[:, col_bj_idx].astype(str).str.strip().str.lower() == 'yes'
+                    df_equity = df_filtered[mask_stock].copy()
+                    
+                    if not df_equity.empty:
+                        df_equity = df_equity.rename(columns={'Chief Name': 'Manager'})
+                        
+                        # --- FILTRO ESPECÍFICO PARA COLUMNA BN ---
+                        col_bn_name = df_equity.columns[col_bn_idx]
+                        bn_unique_vals = sorted(df_equity.iloc[:, col_bn_idx].dropna().astype(str).unique().tolist())
+                        
+                        selected_bn = st.multiselect(
+                            f"Filter by % ({col_bn_name}):", 
+                            options=bn_unique_vals, 
+                            default=bn_unique_vals
+                        )
+                        
+                        # Aplicar filtro de BN a la tabla temporal
+                        if selected_bn:
+                            df_equity = df_equity[df_equity.iloc[:, col_bn_idx].astype(str).isin(selected_bn)]
+                        
+                        # --- CÁLCULO DE VALORES DEL SUMMARY ---
+                        val_bl = pd.to_numeric(df_equity.iloc[:, col_bl_idx], errors='coerce').fillna(0)
+                        val_bn = pd.to_numeric(df_equity.iloc[:, col_bn_idx], errors='coerce').fillna(0)
+                        
+                        # Fórmula solicitada: Proposed = BL * (BN/100)
+                        proposed_values = val_bl * (val_bn / 100)
+                        df_equity['Proposed Recommendation Value'] = proposed_values
+                        
+                        equity_budget = val_bl.sum()
+                        total_proposed = proposed_values.sum()
+                        
+                        # Diferencia vs Budget
+                        variance = total_proposed - equity_budget
+                        
+                        # Regla de color para el estatus
+                        if variance <= 0:
+                            status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
+                        else:
+                            status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
+                            
+                        # --- RENDERIZADO DEL CUADRO DE DATOS (SUMMARY) ---
+                        st.markdown("### Equity Budget Summary")
+                        
+                        summary_html = f"""
+                        <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 20px;">
+                          <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Status (Variance)</th>
+                          </tr>
+                          <tr style="background-color: white;">
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${equity_budget:,.2f}</td>
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
+                          </tr>
+                        </table>
+                        """
+                        st.markdown(summary_html, unsafe_allow_html=True)
+                        
+                        # --- LISTADO DETALLADO CON ALERTAS ---
+                        st.markdown("### 👥 Eligible Employees List")
+                        st.write(f"Showing **{len(df_equity)}** employees.")
+                        
+                        # Función para colorear de amarillo si BN > 100
+                        def color_equity_row(row):
+                            try:
+                                # Leemos el valor numérico de la columna BN
+                                current_bn = pd.to_numeric(row.iloc[col_bn_idx], errors='coerce')
+                                if pd.notna(current_bn) and current_bn > 100:
+                                    return ['background-color: #ffffcc'] * len(row)  # Amarillo claro
+                            except Exception:
+                                pass
+                            return [''] * len(row)
+                            
+                        df_eq_styled = df_equity.style.apply(color_equity_row, axis=1)
+                        st.dataframe(df_eq_styled, use_container_width=True)
+
+                    else:
+                        st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
+                else:
+                    st.error("The uploaded file does not contain enough columns to process Equity Planning metrics (requires up to Column BN).")
+
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
 else:
