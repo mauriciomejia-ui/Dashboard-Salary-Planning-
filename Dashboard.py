@@ -482,15 +482,24 @@ if file1 is not None and file2 is not None:
                 
                 st.write(f"Showing **{len(df_detalle)}** matching employees.")
                 
-                def aplicar_color_fila(row, colores_serie):
-                    color_hex = colores_serie.loc[row.name]
-                    css = f"background-color: {color_hex}" if color_hex else ""
-                    return [css] * len(row)
-
                 if not df_detalle.empty:
-                    serie_colores = df_detalle['RowColor']
+                    # EXTRAEMOS ARREGLO DE COLORES ANTES DE ALTERAR LA TABLA
+                    colores_array = df_detalle['RowColor'].values
                     df_visual = df_detalle.drop(columns=['RowColor'])
-                    df_estilizado = df_visual.style.apply(aplicar_color_fila, colores_serie=serie_colores, axis=1)
+                    
+                    # MAGIA PARA CONGELAR COLUMNAS: Volvemos índice a las primeras 4 columnas (A a D)
+                    cols_fijas = list(df_visual.columns[:4])
+                    df_visual = df_visual.set_index(cols_fijas)
+                    
+                    # Función para pintar tabla completa bloqueando índices duplicados
+                    def aplicar_colores(df_vista):
+                        df_styles = pd.DataFrame('', index=df_vista.index, columns=df_vista.columns)
+                        estilos = [f"background-color: {c}" if c else "" for c in colores_array]
+                        for col in df_styles.columns:
+                            df_styles[col] = estilos
+                        return df_styles
+                    
+                    df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
                     st.dataframe(df_estilizado, use_container_width=True)
                 else:
                     st.info("No employees match the selected table filters.")
@@ -637,17 +646,31 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
-                        def color_equity_row(row):
-                            categoria = row.get('BN_Category', '')
-                            if categoria == "Above Midpoint w/o Comments":
-                                return ['background-color: #ffcccc'] * len(row)  # Rojo pastel (Sin justificar)
-                            elif categoria == "Above Midpoint":
-                                return ['background-color: #ffffcc'] * len(row)  # Amarillo claro (Justificado)
-                            return [''] * len(row)
-                        
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
-                            df_eq_styled = df_equity_filtered.style.apply(color_equity_row, axis=1)
+                            
+                            # EXTRAEMOS ARREGLO DE CATEGORÍAS
+                            categorias_array = df_equity_filtered['BN_Category'].values
+                            
+                            # CONGELAR COLUMNAS: Volvemos índice a las primeras 4 columnas (A a D)
+                            cols_fijas_eq = list(df_equity_filtered.columns[:4])
+                            df_visual_eq = df_equity_filtered.set_index(cols_fijas_eq)
+                            
+                            def color_equity_totales(df_vista):
+                                df_styles = pd.DataFrame('', index=df_vista.index, columns=df_vista.columns)
+                                estilos = []
+                                for cat in categorias_array:
+                                    if cat == "Above Midpoint w/o Comments":
+                                        estilos.append('background-color: #ffcccc')
+                                    elif cat == "Above Midpoint":
+                                        estilos.append('background-color: #ffffcc')
+                                    else:
+                                        estilos.append('')
+                                for col in df_styles.columns:
+                                    df_styles[col] = estilos
+                                return df_styles
+                            
+                            df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
                             st.dataframe(df_eq_styled, use_container_width=True)
                         else:
                             st.info("Select one or more categories above to view employee details in this table.")
