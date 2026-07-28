@@ -520,19 +520,21 @@ if file1 is not None and file2 is not None:
                             val_bn = row.iloc[col_bn_idx]
                             val_bp = str(row.iloc[col_bp_idx]).strip()
                             
-                            # Validar si BN está en blanco
+                            # Validar si BN está en blanco o es 0
                             if pd.isna(val_bn) or str(val_bn).strip() == '' or str(val_bn).lower() == 'nan':
-                                return "Blank"
+                                return "0%"
                             
                             try:
                                 bn_num = float(val_bn)
                             except ValueError:
-                                return "Blank"
+                                return "0%"
                                 
                             # Validar si BP (Comments) está en blanco
                             bp_vacio = (val_bp == '' or val_bp.lower() in ['nan', 'none', 'null'])
                             
-                            if bn_num < 100:
+                            if bn_num == 0:
+                                return "0%"
+                            elif bn_num < 100:
                                 return "Below 100%"
                             elif bn_num == 100:
                                 return "On Midpoint 100%"
@@ -542,14 +544,14 @@ if file1 is not None and file2 is not None:
                                 else:
                                     return "Above Midpoint"  # Alerta Amarilla
                             
-                            return "Blank"
+                            return "0%"
 
                         df_equity['BN_Category'] = df_equity.apply(clasificar_bn, axis=1)
                         
                         # --- 2. FILTRO INTELIGENTE CON CONCEPTOS ---
                         st.markdown("##### Filter by Percentage Categories")
                         opciones_conceptos = [
-                            "Blank", 
+                            "0%", 
                             "Below 100%", 
                             "On Midpoint 100%", 
                             "Above Midpoint", 
