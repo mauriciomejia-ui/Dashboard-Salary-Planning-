@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.subplots as subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
@@ -22,6 +23,26 @@ def cargar_memoria():
 
 if 'memoria_filtros' not in st.session_state:
     st.session_state['memoria_filtros'] = cargar_memoria()
+
+# --- FUNCIONES ROBUSTAS PARA LEER DATOS EXCEL ---
+def get_num(val):
+    if pd.isna(val): return 0.0
+    if isinstance(val, (int, float)): return float(val)
+    val_str = str(val).replace('$', '').replace(',', '').replace('%', '').strip()
+    if val_str.lower() in ['', '-', 'nan', 'none', 'null']: return 0.0
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
+
+def get_date(val):
+    if pd.isna(val): return pd.NaT
+    val_str = str(val).strip().lower()
+    if val_str in ['', 'nan', 'none', 'nat', 'null']: return pd.NaT
+    try:
+        return pd.to_datetime(val)
+    except Exception:
+        return pd.NaT
 
 # --- FILE UPLOADER ---
 col_up1, col_up2 = st.columns(2)
@@ -72,7 +93,6 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        # Opciones disponibles
         gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist())
         org_options = sorted(df['Reporting Organization'].dropna().unique().tolist())
         func_options = sorted(df['Function'].dropna().unique().tolist())
@@ -88,8 +108,6 @@ if file1 is not None and file2 is not None:
             def_comps = config.get("comps", [])
             def_subgroups = config.get("subgroups", [])
             def_potentials = config.get("potentials", [])
-        else:
-            def_potentials = []
 
         st.sidebar.markdown("---")
         
@@ -154,7 +172,6 @@ if file1 is not None and file2 is not None:
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
-            # ====== CREACIÓN DE PESTAÑAS (TABS) ======
             tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
             
             # ==========================================
@@ -188,7 +205,7 @@ if file1 is not None and file2 is not None:
                 st.table(cost_df)
                 st.markdown("---")
 
-                # --- PREPARE DATA FOR CHARTS ---
+                # (LAS GRÁFICAS DE PASTEL Y BARRAS SE MANTIENEN IGUAL)
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -285,11 +302,11 @@ if file1 is not None and file2 is not None:
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
                             ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax4.axis('equal')
-                            ax4.set_title('Potential Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
+                            ax4.set_title('Potential Split', fontweight='bold', pad=15)
                         else:
                             ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
                     else:
-                        ax4.text(0.5, 0.5, "No movements to analyze for Potential", ha='center', va='center')
+                        ax4.text(0.5, 0.5, "No movements", ha='center', va='center')
                     st.pyplot(fig4)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -337,13 +354,13 @@ if file1 is not None and file2 is not None:
                         ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
                         ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
                         ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
-                        ax5.set_ylabel('Number of Employees')
+                        ax5.set_ylabel('Employees')
                         ax5.set_ylim(0, max_y * 1.15)
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
                         fig5.tight_layout()
                     else:
-                        ax5.text(0.5, 0.5, "Columns W or AX not found", ha='center', va='center')
+                        ax5.text(0.5, 0.5, "Columns missing", ha='center', va='center')
                     st.pyplot(fig5)
 
                 with col6:
@@ -363,15 +380,15 @@ if file1 is not None and file2 is not None:
                                 ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
                                          f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
                                 
-                            ax6.set_title('Gender Split (Only Staff w/ Adjustments or Promotions)', fontweight='bold', pad=15)
-                            ax6.set_ylabel('Number of Employees')
+                            ax6.set_title('Gender Split', fontweight='bold', pad=15)
+                            ax6.set_ylabel('Employees')
                             ax6.spines['top'].set_visible(False)
                             ax6.spines['right'].set_visible(False)
                             fig6.tight_layout()
                         else:
-                            ax6.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                            ax6.text(0.5, 0.5, "No data", ha='center', va='center')
                     else:
-                        ax6.text(0.5, 0.5, "No Gender data to analyze", ha='center', va='center')
+                        ax6.text(0.5, 0.5, "No Gender data", ha='center', va='center')
                     st.pyplot(fig6)
                 
                 st.markdown("---")
@@ -417,21 +434,23 @@ if file1 is not None and file2 is not None:
                 
                 FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
+                # NUEVA LÓGICA DE EXTRACCIÓN SÚPER SEGURA
                 def evaluar_alertas(row):
                     comentarios = []
                     color = ''
-                    try:
-                        val_j = pd.to_numeric(row.iloc[9], errors='coerce') if len(row) > 9 else 0
-                        val_z = pd.to_datetime(row.iloc[25], errors='coerce') if len(row) > 25 else pd.NaT
-                        val_ab = pd.to_numeric(row.iloc[27], errors='coerce') if len(row) > 27 else 0
-                        val_ac = pd.to_numeric(row.iloc[28], errors='coerce') if len(row) > 28 else 0
-                        val_af = pd.to_numeric(row.iloc[31], errors='coerce') if len(row) > 31 else 0
-                        val_ah = str(row.iloc[33]).strip() if len(row) > 33 else ""
-                        val_ai = pd.to_numeric(row.iloc[34], errors='coerce') if len(row) > 34 else 0
-                        val_ak = pd.to_numeric(row.iloc[36], errors='coerce') if len(row) > 36 else 0
+                    
+                    if len(row) > 37: # Verificar que existan las columnas
+                        val_j = get_num(row.iloc[9])
+                        val_z = get_date(row.iloc[25])
+                        val_ab = get_num(row.iloc[27])
+                        val_ac = get_num(row.iloc[28])
+                        val_af = get_num(row.iloc[31])
+                        val_ah = str(row.iloc[33]).strip().lower()
+                        val_ai = get_num(row.iloc[34])
+                        val_ak = get_num(row.iloc[36])
+                        val_al_raw = str(row.iloc[37]).strip().lower()
                         
-                        val_al_raw = str(row.iloc[37]).strip() if len(row) > 37 else ""
-                        al_vacio = val_al_raw == "" or val_al_raw.lower() in ['nan', 'nat', 'none']
+                        al_vacio = val_al_raw in ['', 'nan', 'nat', 'none', 'null']
                         
                         flag_rojo = False
                         flag_naranja = False
@@ -443,7 +462,7 @@ if file1 is not None and file2 is not None:
                                 flag_naranja = True
                                 comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
                                 
-                        if val_af > 0 and val_ah == "None Selected":
+                        if val_af > 0 and val_ah in ["none selected", "nan", "", "none"]:
                             flag_amarillo = True
                             comentarios.append("Adjustment con 'None Selected'")
                             
@@ -462,19 +481,15 @@ if file1 is not None and file2 is not None:
                         if flag_rojo: color = '#ffcccc'
                         elif flag_naranja: color = '#ffe4b5'
                         elif flag_amarillo: color = '#ffffcc'
-                    except Exception:
-                        pass
-                    # Retornamos una lista nativa para que Pandas no colapse al aplicar
-                    return [", ".join(comentarios), color]
+                        
+                    return [" | ".join(comentarios), color]
 
-                # --- LÓGICA BLINDADA PARA LA TABLA ---
+                # Aplicamos la lógica y procesamos visualmente
                 if not df_detalle.empty:
-                    # Aplicamos alertas y extraemos de forma segura
                     alertas_lista = df_detalle.apply(evaluar_alertas, axis=1).tolist()
-                    df_detalle['Comments'] = [x[0] for x in alertas_lista]
+                    df_detalle['ALERT_COMMENTS'] = [x[0] for x in alertas_lista]
                     df_detalle['RowColor'] = [x[1] for x in alertas_lista]
                     
-                    # Filtros de colores
                     if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
                         df_detalle = df_detalle[df_detalle['RowColor'] != '']
                     elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
@@ -487,14 +502,19 @@ if file1 is not None and file2 is not None:
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
                         
+                        # ¡MAGIA UX!: Movemos 'ALERT_COMMENTS' a la posición 4, justo después del índice fijo
+                        columnas_todas = list(df_detalle.columns)
+                        if 'ALERT_COMMENTS' in columnas_todas:
+                            columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
+                            df_detalle = df_detalle[columnas_todas]
+                        
                         colores_array = df_detalle['RowColor'].values
                         df_visual = df_detalle.drop(columns=['RowColor'])
                         
-                        # Congelamos las primeras 4 columnas convirtiéndolas en índice
+                        # Convertimos las primeras 4 columnas en índice (Para congelarlas)
                         cols_fijas = list(df_visual.columns[:4])
                         df_visual = df_visual.set_index(cols_fijas)
                         
-                        # Motor de pintura inquebrantable
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
                             style_dict = {col: estilos for col in df_vista.columns}
@@ -503,9 +523,9 @@ if file1 is not None and file2 is not None:
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
                         st.dataframe(df_estilizado, use_container_width=True)
                     else:
-                        st.info("No employees match the selected table filters.")
+                        st.info("No employees match the selected alert color.")
                 else:
-                    st.info("No employees match the selected table filters.")
+                    st.info("No employees match the selected Movement Type.")
 
 
             # ==========================================
@@ -628,21 +648,26 @@ if file1 is not None and file2 is not None:
                                     return "Above Midpoint" 
                             return "0%"
 
-                        df_equity_full['BN_Category'] = df_equity_full.apply(clasificar_bn, axis=1)
+                        df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
                         
                         if seleccion_conceptos:
-                            df_equity_filtered = df_equity_full[df_equity_full['BN_Category'].isin(seleccion_conceptos)]
+                            df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
-                        # --- LÓGICA BLINDADA PARA LA TABLA DE EQUITY ---
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
                             
-                            categorias_array = df_equity_filtered['BN_Category'].values
+                            # ¡MAGIA UX!: Movemos 'ALERT_CATEGORY' a la posición 4
+                            cols_eq = list(df_equity_filtered.columns)
+                            if 'ALERT_CATEGORY' in cols_eq:
+                                cols_eq.insert(4, cols_eq.pop(cols_eq.index('ALERT_CATEGORY')))
+                                df_equity_filtered = df_equity_filtered[cols_eq]
+
+                            categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             
                             cols_fijas_eq = list(df_equity_filtered.columns[:4])
                             df_visual_eq = df_equity_filtered.set_index(cols_fijas_eq)
