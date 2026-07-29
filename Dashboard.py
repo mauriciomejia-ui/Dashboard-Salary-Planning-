@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.subplots as subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
@@ -205,7 +204,6 @@ if file1 is not None and file2 is not None:
                 st.table(cost_df)
                 st.markdown("---")
 
-                # (LAS GRÁFICAS DE PASTEL Y BARRAS SE MANTIENEN IGUAL)
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
