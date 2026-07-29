@@ -89,7 +89,6 @@ if file1 is not None and file2 is not None:
             def_subgroups = config.get("subgroups", [])
             def_potentials = config.get("potentials", [])
         else:
-            # SIEMPRE VACÍO POR DEFECTO
             def_potentials = []
 
         st.sidebar.markdown("---")
@@ -465,42 +464,46 @@ if file1 is not None and file2 is not None:
                         elif flag_amarillo: color = '#ffffcc'
                     except Exception:
                         pass
-                    return pd.Series([", ".join(comentarios), color])
+                    # Retornamos una lista nativa para que Pandas no colapse al aplicar
+                    return [", ".join(comentarios), color]
 
-                res_alertas = df_detalle.apply(evaluar_alertas, axis=1)
-                df_detalle['Comments'] = res_alertas[0]
-                df_detalle['RowColor'] = res_alertas[1]
-                
-                if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
-                    df_detalle = df_detalle[df_detalle['RowColor'] != '']
-                elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
-                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
-                elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
-                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
-                elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
-                    df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
-                
-                st.write(f"Showing **{len(df_detalle)}** matching employees.")
-                
+                # --- LÓGICA BLINDADA PARA LA TABLA ---
                 if not df_detalle.empty:
-                    # EXTRAEMOS ARREGLO DE COLORES ANTES DE ALTERAR LA TABLA
-                    colores_array = df_detalle['RowColor'].values
-                    df_visual = df_detalle.drop(columns=['RowColor'])
+                    # Aplicamos alertas y extraemos de forma segura
+                    alertas_lista = df_detalle.apply(evaluar_alertas, axis=1).tolist()
+                    df_detalle['Comments'] = [x[0] for x in alertas_lista]
+                    df_detalle['RowColor'] = [x[1] for x in alertas_lista]
                     
-                    # MAGIA PARA CONGELAR COLUMNAS: Volvemos índice a las primeras 4 columnas (A a D)
-                    cols_fijas = list(df_visual.columns[:4])
-                    df_visual = df_visual.set_index(cols_fijas)
+                    # Filtros de colores
+                    if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] != '']
+                    elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
+                    elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
+                    elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
-                    # Función para pintar tabla completa bloqueando índices duplicados
-                    def aplicar_colores(df_vista):
-                        df_styles = pd.DataFrame('', index=df_vista.index, columns=df_vista.columns)
-                        estilos = [f"background-color: {c}" if c else "" for c in colores_array]
-                        for col in df_styles.columns:
-                            df_styles[col] = estilos
-                        return df_styles
-                    
-                    df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                    st.dataframe(df_estilizado, use_container_width=True)
+                    if not df_detalle.empty:
+                        st.write(f"Showing **{len(df_detalle)}** matching employees.")
+                        
+                        colores_array = df_detalle['RowColor'].values
+                        df_visual = df_detalle.drop(columns=['RowColor'])
+                        
+                        # Congelamos las primeras 4 columnas convirtiéndolas en índice
+                        cols_fijas = list(df_visual.columns[:4])
+                        df_visual = df_visual.set_index(cols_fijas)
+                        
+                        # Motor de pintura inquebrantable
+                        def aplicar_colores(df_vista):
+                            estilos = [f"background-color: {c}" if c else "" for c in colores_array]
+                            style_dict = {col: estilos for col in df_vista.columns}
+                            return pd.DataFrame(style_dict, index=df_vista.index)
+                        
+                        df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
+                        st.dataframe(df_estilizado, use_container_width=True)
+                    else:
+                        st.info("No employees match the selected table filters.")
                 else:
                     st.info("No employees match the selected table filters.")
 
@@ -512,7 +515,6 @@ if file1 is not None and file2 is not None:
                 st.subheader("📈 Equity Planning")
                 st.info("This section displays data exclusively for employees eligible for stock (Column BJ = 'Yes').")
                 
-                # Índices correspondientes en Python
                 col_bj_idx = 61  # Stock Eligibility
                 col_bl_idx = 63  # Midpoint of stock Range
                 col_bn_idx = 65  # BN Column (Percentage)
@@ -525,31 +527,24 @@ if file1 is not None and file2 is not None:
                     if not df_equity_full.empty:
                         df_equity_full = df_equity_full.rename(columns={'Chief Name': 'Manager'})
                         
-                        # --- 0. EXTRACCIÓN DE VARIABLES GLOBALES ---
                         val_bn_full = pd.to_numeric(df_equity_full.iloc[:, col_bn_idx], errors='coerce').fillna(0)
                         val_bl_full = pd.to_numeric(df_equity_full.iloc[:, col_bl_idx], errors='coerce').fillna(0)
                         
-                        # Guardamos el Proposed Value para poder usarlo en la tabla final también
                         df_equity_full['Proposed Recommendation Value'] = val_bl_full * (val_bn_full / 100)
                         
-                        # Lógica para la Gráfica de Pastel (Pie Chart)
                         c_unplanned = (val_bn_full == 0).sum()
                         c_below = ((val_bn_full > 0) & (val_bn_full < 100)).sum()
                         c_midpoint = (val_bn_full == 100).sum()
                         c_above = (val_bn_full > 100).sum()
                         
                         st.markdown("### Equity Overview")
-                        
-                        # Layout lado a lado para la Gráfica y el Summary
                         col_pie, col_summary = st.columns([1, 1.5])
                         
-                        # --- 1. RENDER PIE CHART ---
                         with col_pie:
                             pie_labels_raw = ["Unplanned equity", "Below Midpoint", "Midpoint", "Above midpoint"]
                             pie_sizes_raw = [c_unplanned, c_below, c_midpoint, c_above]
-                            pie_colors_raw = ['#d3d3d3', '#ffb347', '#87cefa', '#ff9999'] # Gris, Naranja, Azul claro, Rojo claro
+                            pie_colors_raw = ['#d3d3d3', '#ffb347', '#87cefa', '#ff9999'] 
                             
-                            # Filtramos categorías que estén en 0 para no encimar texto
                             pie_labels = [l for l, s in zip(pie_labels_raw, pie_sizes_raw) if s > 0]
                             pie_sizes = [s for s in pie_sizes_raw if s > 0]
                             pie_colors = [c for c, s in zip(pie_colors_raw, pie_sizes_raw) if s > 0]
@@ -564,7 +559,6 @@ if file1 is not None and file2 is not None:
                                 ax_eq.text(0.5, 0.5, "No data available", ha='center', va='center')
                             st.pyplot(fig_eq)
                         
-                        # --- 2. RENDER SUMMARY GENERAL & MULTISELECT ---
                         with col_summary:
                             equity_budget = val_bl_full.sum()
                             total_proposed = df_equity_full['Proposed Recommendation Value'].sum()
@@ -607,7 +601,6 @@ if file1 is not None and file2 is not None:
                                 default=[]
                             )
 
-                        # --- 3. CLASIFICACIÓN DE CONCEPTOS (BN Category para la tabla) ---
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
                             val_bp = str(row.iloc[col_bp_idx]).strip()
@@ -637,7 +630,6 @@ if file1 is not None and file2 is not None:
 
                         df_equity_full['BN_Category'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        # --- 4. LISTADO DETALLADO ---
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
                         
@@ -646,18 +638,16 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
+                        # --- LÓGICA BLINDADA PARA LA TABLA DE EQUITY ---
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
                             
-                            # EXTRAEMOS ARREGLO DE CATEGORÍAS
                             categorias_array = df_equity_filtered['BN_Category'].values
                             
-                            # CONGELAR COLUMNAS: Volvemos índice a las primeras 4 columnas (A a D)
                             cols_fijas_eq = list(df_equity_filtered.columns[:4])
                             df_visual_eq = df_equity_filtered.set_index(cols_fijas_eq)
                             
                             def color_equity_totales(df_vista):
-                                df_styles = pd.DataFrame('', index=df_vista.index, columns=df_vista.columns)
                                 estilos = []
                                 for cat in categorias_array:
                                     if cat == "Above Midpoint w/o Comments":
@@ -666,9 +656,9 @@ if file1 is not None and file2 is not None:
                                         estilos.append('background-color: #ffffcc')
                                     else:
                                         estilos.append('')
-                                for col in df_styles.columns:
-                                    df_styles[col] = estilos
-                                return df_styles
+                                        
+                                style_dict = {col: estilos for col in df_vista.columns}
+                                return pd.DataFrame(style_dict, index=df_vista.index)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
                             st.dataframe(df_eq_styled, use_container_width=True)
