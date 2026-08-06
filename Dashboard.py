@@ -202,8 +202,61 @@ if file1 is not None and file2 is not None:
                 })
                 
                 st.table(cost_df)
+                
+                # --- NUEVA SECCIÓN: DESGLOSE DE COSTOS (BREAKDOWN) ---
+                st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
+                tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
+                
+                # Función auxiliar para agrupar y calcular
+                def build_cost_breakdown(df_base, col_name):
+                    # Arrays temporales para calculo exacto
+                    a_pct = pd.to_numeric(df_base.get('%Adjustment', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
+                    p_pct = pd.to_numeric(df_base.get('%Growth Promotion', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
+                    s_t = pd.to_numeric(df_base.get('$ Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
+                    s_au = pd.to_numeric(df_base.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
+                    
+                    df_temp = pd.DataFrame({
+                        'Group': df_base[col_name].fillna('Unknown'),
+                        'Adj_Cost': np.where(a_pct > 0, (a_pct / 100) * s_t, 0),
+                        'Promo_Cost': np.where(p_pct > 0, (p_pct / 100) * s_t, 0),
+                        'Total_Salary': s_t,
+                        'New_Salary': s_au
+                    })
+                    
+                    grp = df_temp.groupby('Group').sum().reset_index()
+                    grp['Total Cost'] = grp['Adj_Cost'] + grp['Promo_Cost']
+                    grp['Total % Increment'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
+                    
+                    # Renombrar columnas para la tabla
+                    grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Total % Increment']]
+                    grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adjustment Cost', 'Promo_Cost': 'Growth Promo Cost'}, inplace=True)
+                    
+                    return grp
+                
+                format_dict = {
+                    'Adjustment Cost': '${:,.2f}',
+                    'Growth Promo Cost': '${:,.2f}',
+                    'Total Cost': '${:,.2f}',
+                    'Total % Increment': '{:.2f}%'
+                }
+                
+                with tab_org:
+                    if 'Reporting Organization' in df_filtered.columns:
+                        df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization')
+                        st.dataframe(df_breakdown_org.style.format(format_dict), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Reporting Organization column not found.")
+                        
+                with tab_func:
+                    if 'Function' in df_filtered.columns:
+                        df_breakdown_func = build_cost_breakdown(df_filtered, 'Function')
+                        st.dataframe(df_breakdown_func.style.format(format_dict), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Function column not found.")
+
                 st.markdown("---")
 
+                # (LAS GRÁFICAS Y TABLAS RESTANTES SE MANTIENEN INTACTAS)
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
