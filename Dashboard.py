@@ -168,6 +168,9 @@ if file1 is not None and file2 is not None:
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
         
+        # FECHA MAESTRA PARA LOS CÁLCULOS (Years in SG y Alertas)
+        FECHA_ACTUAL = pd.to_datetime('2026-07-23')
+
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
@@ -179,7 +182,7 @@ if file1 is not None and file2 is not None:
             with tab_salary:
                 st.subheader("💰 Cost Summary")
                 
-                # Input Dinámico para el Target de Budget (Permite evaluar la varianza)
+                # Input Dinámico para el Target de Budget
                 col_b1, col_b2 = st.columns([1, 3])
                 with col_b1:
                     budget_pct = st.number_input("🎯 Set Target Budget %:", min_value=0.0, max_value=100.0, value=3.0, step=0.1)
@@ -200,7 +203,6 @@ if file1 is not None and file2 is not None:
                 pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
                 pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
-                # LÓGICA DE BUDGET Y VARIANZA PARA SALARY
                 budget_amount = sum_t * (budget_pct / 100)
                 variance = total_cost - budget_amount
 
@@ -279,6 +281,7 @@ if file1 is not None and file2 is not None:
 
                 st.markdown("---")
 
+                # --- PREPARE DATA FOR CHARTS ---
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -463,6 +466,68 @@ if file1 is not None and file2 is not None:
                     else:
                         ax6.text(0.5, 0.5, "No Gender data", ha='center', va='center')
                     st.pyplot(fig6)
+
+                # --- NUEVA GRÁFICA SOLICITADA: YEARS IN SG VS NEW QRTLE ---
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
+                
+                col_y_idx = 24  # Potential
+                col_z_idx = 25  # Date in SG
+                col_ax_idx = 49 # New Qrtle / AX
+                
+                if len(df_filtered.columns) > max(col_y_idx, col_z_idx, col_ax_idx):
+                    df_pot = df_filtered.copy()
+                    df_pot['Pot_Filter'] = df_pot.iloc[:, col_y_idx].astype(str).str.strip().str.lower()
+                    mask_pot = df_pot['Pot_Filter'].isin(['high potential', 'strategic few'])
+                    df_pot_filtered = df_pot[mask_pot].copy()
+                    
+                    if not df_pot_filtered.empty:
+                        df_pot_filtered['Date_in_SG'] = df_pot_filtered.iloc[:, col_z_idx].apply(get_date)
+                        df_pot_filtered['Years_Raw'] = ((FECHA_ACTUAL - df_pot_filtered['Date_in_SG']).dt.days / 365.25)
+                        df_pot_filtered['Years in SG'] = df_pot_filtered['Years_Raw'].apply(lambda x: f"{int(x)} Years" if pd.notna(x) else "Unknown")
+                        
+                        df_pot_filtered['New Qrtle'] = df_pot_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
+                        mapeo_q = {
+                            "Below Minimum": "Below Min", "Below Min": "Below Min",
+                            "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
+                            "AboveMax": "Above max", "Above max": "Above max"
+                        }
+                        df_pot_filtered['New Qrtle'] = df_pot_filtered['New Qrtle'].replace(mapeo_q)
+                        
+                        orden_qrtle = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
+                        
+                        # Crear tabla cruzada (pivot)
+                        pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Qrtle'])
+                        
+                        # Reordenar columnas según Quartile
+                        cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
+                        pivot_df = pivot_df[cols_presentes]
+                        
+                        # Ordenar filas por el número de años
+                        def sort_years(idx):
+                            try: return int(idx.split()[0])
+                            except: return 999
+                            
+                        pivot_df = pivot_df.loc[sorted(pivot_df.index, key=sort_years)]
+
+                        fig_new, ax_new = plt.subplots(figsize=(10, 5))
+                        pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis')
+                        
+                        ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
+                        ax_new.set_ylabel("Number of Employees")
+                        ax_new.set_xlabel("Years in Subgroup")
+                        plt.xticks(rotation=0)
+                        ax_new.spines['top'].set_visible(False)
+                        ax_new.spines['right'].set_visible(False)
+                        ax_new.legend(title="New Qrtle", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        fig_new.tight_layout()
+                        
+                        st.pyplot(fig_new)
+                    else:
+                        st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
+                else:
+                    st.error("Columns for Date in SG or New Qrtle not found.")
+
                 
                 st.markdown("---")
 
@@ -512,8 +577,6 @@ if file1 is not None and file2 is not None:
                     
                 df_detalle = df_filtered[mask].copy()
                 df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
-                
-                FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
                 def evaluar_alertas(row):
                     comentarios = []
