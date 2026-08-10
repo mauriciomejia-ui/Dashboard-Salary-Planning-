@@ -179,6 +179,11 @@ if file1 is not None and file2 is not None:
             with tab_salary:
                 st.subheader("💰 Cost Summary")
                 
+                # Input Dinámico para el Target de Budget (Permite evaluar la varianza)
+                col_b1, col_b2 = st.columns([1, 3])
+                with col_b1:
+                    budget_pct = st.number_input("🎯 Set Target Budget %:", min_value=0.0, max_value=100.0, value=3.0, step=0.1)
+                
                 adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
                 promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
                 col_t_annual_usd = pd.to_numeric(df_filtered.get('$ Annual Salary(in USD)', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
@@ -195,19 +200,29 @@ if file1 is not None and file2 is not None:
                 pct_total_cost_vs_total = (total_cost / sum_t) * 100 if sum_t > 0 else 0
                 pct_incremento = ((sum_au / sum_t) - 1) * 100 if sum_t > 0 else 0
 
+                # LÓGICA DE BUDGET Y VARIANZA PARA SALARY
+                budget_amount = sum_t * (budget_pct / 100)
+                variance = total_cost - budget_amount
+
+                if variance <= 0:
+                    status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
+                else:
+                    status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
+
                 cost_df = pd.DataFrame({
-                    "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total % Increment"],
-                    "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"{pct_incremento:,.2f}%"],
-                    "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", "-"]
+                    "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
+                    "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
+                    "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
                 st.table(cost_df)
+                st.markdown(f"<div style='margin-bottom: 20px; font-size: 18px;'><strong>Variance vs BGT:</strong> {status_html}</div>", unsafe_allow_html=True)
                 
                 # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
                 
-                def build_cost_breakdown(df_base, col_name):
+                def build_cost_breakdown(df_base, col_name, b_pct):
                     a_pct = pd.to_numeric(df_base.get('%Adjustment', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     p_pct = pd.to_numeric(df_base.get('%Growth Promotion', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     s_t = pd.to_numeric(df_base.get('$ Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
@@ -223,31 +238,42 @@ if file1 is not None and file2 is not None:
                     
                     grp = df_temp.groupby('Group').sum().reset_index()
                     grp['Total Cost'] = grp['Adj_Cost'] + grp['Promo_Cost']
+                    grp['Budget Amount'] = grp['Total_Salary'] * (b_pct / 100)
+                    grp['Variance vs BGT'] = grp['Total Cost'] - grp['Budget Amount']
+                    grp['Status'] = np.where(grp['Variance vs BGT'] > 0, 'Over Budget', 'On/Under Budget')
                     grp['Total % Increment'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
                     
-                    grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Total % Increment']]
+                    grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget Amount', 'Variance vs BGT', 'Status', 'Total % Increment']]
                     grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adjustment Cost', 'Promo_Cost': 'Growth Promo Cost'}, inplace=True)
                     
                     return grp
                 
+                def color_salary_variance(row):
+                    if row['Variance vs BGT'] > 0:
+                        return ['color: red; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                    else:
+                        return ['color: green; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+
                 format_dict = {
                     'Adjustment Cost': '${:,.2f}',
                     'Growth Promo Cost': '${:,.2f}',
                     'Total Cost': '${:,.2f}',
+                    'Budget Amount': '${:,.2f}',
+                    'Variance vs BGT': '${:,.2f}',
                     'Total % Increment': '{:.2f}%'
                 }
                 
                 with tab_org:
                     if 'Reporting Organization' in df_filtered.columns:
-                        df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization')
-                        st.dataframe(df_breakdown_org.style.format(format_dict), use_container_width=True, hide_index=True)
+                        df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True, hide_index=True)
                     else:
                         st.info("Reporting Organization column not found.")
                         
                 with tab_func:
                     if 'Function' in df_filtered.columns:
-                        df_breakdown_func = build_cost_breakdown(df_filtered, 'Function')
-                        st.dataframe(df_breakdown_func.style.format(format_dict), use_container_width=True, hide_index=True)
+                        df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True, hide_index=True)
                     else:
                         st.info("Function column not found.")
 
@@ -562,7 +588,6 @@ if file1 is not None and file2 is not None:
                         else:
                             # Buscar SOLO en columnas de Nombre del empleado
                             name_cols = [c for c in df_detalle.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
-                            # Fallback si las columnas tienen un nombre ligeramente distinto
                             if not name_cols:
                                 name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
                             
@@ -570,7 +595,7 @@ if file1 is not None and file2 is not None:
                                 mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in name_cols]).any(axis=1)
                                 df_detalle = df_detalle[mask_search]
                             else:
-                                df_detalle = df_detalle.iloc[0:0] # Vaciamos si no existe columna de nombre
+                                df_detalle = df_detalle.iloc[0:0]
 
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
