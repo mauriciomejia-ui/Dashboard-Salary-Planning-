@@ -207,9 +207,7 @@ if file1 is not None and file2 is not None:
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
                 
-                # Función auxiliar para agrupar y calcular
                 def build_cost_breakdown(df_base, col_name):
-                    # Arrays temporales para calculo exacto
                     a_pct = pd.to_numeric(df_base.get('%Adjustment', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     p_pct = pd.to_numeric(df_base.get('%Growth Promotion', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     s_t = pd.to_numeric(df_base.get('$ Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
@@ -227,7 +225,6 @@ if file1 is not None and file2 is not None:
                     grp['Total Cost'] = grp['Adj_Cost'] + grp['Promo_Cost']
                     grp['Total % Increment'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
                     
-                    # Renombrar columnas para la tabla
                     grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Total % Increment']]
                     grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adjustment Cost', 'Promo_Cost': 'Growth Promo Cost'}, inplace=True)
                     
@@ -256,7 +253,6 @@ if file1 is not None and file2 is not None:
 
                 st.markdown("---")
 
-                # (LAS GRÁFICAS Y TABLAS RESTANTES SE MANTIENEN INTACTAS)
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -485,12 +481,11 @@ if file1 is not None and file2 is not None:
                 
                 FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
-                # NUEVA LÓGICA DE EXTRACCIÓN SÚPER SEGURA
                 def evaluar_alertas(row):
                     comentarios = []
                     color = ''
                     
-                    if len(row) > 37: # Verificar que existan las columnas
+                    if len(row) > 37:
                         val_j = get_num(row.iloc[9])
                         val_z = get_date(row.iloc[25])
                         val_ab = get_num(row.iloc[27])
@@ -535,7 +530,6 @@ if file1 is not None and file2 is not None:
                         
                     return [" | ".join(comentarios), color]
 
-                # Aplicamos la lógica y procesamos visualmente
                 if not df_detalle.empty:
                     alertas_lista = df_detalle.apply(evaluar_alertas, axis=1).tolist()
                     df_detalle['ALERT_COMMENTS'] = [x[0] for x in alertas_lista]
@@ -553,7 +547,6 @@ if file1 is not None and file2 is not None:
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
                         
-                        # ¡MAGIA UX!: Movemos 'ALERT_COMMENTS' a la posición 4, justo después del índice fijo
                         columnas_todas = list(df_detalle.columns)
                         if 'ALERT_COMMENTS' in columnas_todas:
                             columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
@@ -562,7 +555,6 @@ if file1 is not None and file2 is not None:
                         colores_array = df_detalle['RowColor'].values
                         df_visual = df_detalle.drop(columns=['RowColor'])
                         
-                        # Convertimos las primeras 4 columnas en índice (Para congelarlas)
                         cols_fijas = list(df_visual.columns[:4])
                         df_visual = df_visual.set_index(cols_fijas)
                         
@@ -657,20 +649,64 @@ if file1 is not None and file2 is not None:
                             """
                             st.markdown(summary_html, unsafe_allow_html=True)
                             
-                            st.markdown("##### Filter Employees Table")
-                            opciones_conceptos = [
-                                "0%", 
-                                "Below 100%", 
-                                "On Midpoint 100%", 
-                                "Above Midpoint", 
-                                "Above Midpoint w/o Comments"
-                            ]
+                        # --- NUEVA SECCIÓN: DESGLOSE DE EQUITY (BREAKDOWN) ---
+                        st.markdown("### 🏢 Equity Breakdown (By Org & Function)")
+                        tab_eq_org, tab_eq_func = st.tabs(["By Reporting Organization", "By Function"])
+                        
+                        def build_equity_breakdown(df_base, col_name):
+                            df_temp = pd.DataFrame({
+                                'Group': df_base[col_name].fillna('Unknown'),
+                                'Equity Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
+                                'Proposed Value': df_base['Proposed Recommendation Value']
+                            })
+                            grp = df_temp.groupby('Group').sum().reset_index()
+                            grp['Variance vs BGT'] = grp['Proposed Value'] - grp['Equity Budget']
+                            grp['Status'] = np.where(grp['Variance vs BGT'] > 0, 'Over Budget', 'On/Under Budget')
+                            grp.rename(columns={'Group': col_name}, inplace=True)
+                            return grp
+
+                        def color_variance_row(row):
+                            if row['Variance vs BGT'] > 0:
+                                return ['color: red; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                            else:
+                                return ['color: green; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                                
+                        format_dict_eq = {
+                            'Equity Budget': '${:,.2f}',
+                            'Proposed Value': '${:,.2f}',
+                            'Variance vs BGT': '${:,.2f}'
+                        }
+
+                        with tab_eq_org:
+                            if 'Reporting Organization' in df_filtered.columns:
+                                df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Reporting Organization column not found.")
+                                
+                        with tab_eq_func:
+                            if 'Function' in df_filtered.columns:
+                                df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Function column not found.")
+                                
+                        st.markdown("---")
                             
-                            seleccion_conceptos = st.multiselect(
-                                "Select Categories to display below:", 
-                                options=opciones_conceptos, 
-                                default=[]
-                            )
+                        st.markdown("##### Filter Employees Table")
+                        opciones_conceptos = [
+                            "0%", 
+                            "Below 100%", 
+                            "On Midpoint 100%", 
+                            "Above Midpoint", 
+                            "Above Midpoint w/o Comments"
+                        ]
+                        
+                        seleccion_conceptos = st.multiselect(
+                            "Select Categories to display below:", 
+                            options=opciones_conceptos, 
+                            default=[]
+                        )
 
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
@@ -701,7 +737,6 @@ if file1 is not None and file2 is not None:
 
                         df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
                         
                         if seleccion_conceptos:
@@ -712,7 +747,6 @@ if file1 is not None and file2 is not None:
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
                             
-                            # ¡MAGIA UX!: Movemos 'ALERT_CATEGORY' a la posición 4
                             cols_eq = list(df_equity_filtered.columns)
                             if 'ALERT_CATEGORY' in cols_eq:
                                 cols_eq.insert(4, cols_eq.pop(cols_eq.index('ALERT_CATEGORY')))
