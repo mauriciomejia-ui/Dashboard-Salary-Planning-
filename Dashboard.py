@@ -469,7 +469,7 @@ if file1 is not None and file2 is not None:
                     search_emp = st.text_input(
                         "3. Search Employee (Exact ID or Name):", 
                         "", 
-                        placeholder="Type Full Name or Exact ID...", 
+                        placeholder="Type Name or Exact Global ID...", 
                         key='search_salary'
                     )
                 
@@ -552,26 +552,25 @@ if file1 is not None and file2 is not None:
                     elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
                         df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
-                    # MOTOR DE BÚSQUEDA INTELIGENTE
+                    # MOTOR DE BÚSQUEDA ACOTADO (ID Exacto o solo columna Name)
                     if search_emp.strip() and not df_detalle.empty:
                         term = search_emp.strip()
-                        # Si tecleó números puros, busca ID exacto
+                        # Si es número, buscar SOLO en Global ID (Exacto)
                         if term.isdigit() and 'Global ID' in df_detalle.columns:
                             mask_exact = df_detalle['Global ID'].astype(str).str.replace(r'\.0$', '', regex=True) == term
-                            if mask_exact.any():
-                                df_detalle = df_detalle[mask_exact]
-                            else:
-                                # Si no encuentra el ID, busca en columnas de texto (Nombres)
-                                cols_to_search = [c for c in df_detalle.columns if df_detalle[c].dtype == 'object']
-                                if cols_to_search:
-                                    mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in cols_to_search]).any(axis=1)
-                                    df_detalle = df_detalle[mask_search]
+                            df_detalle = df_detalle[mask_exact]
                         else:
-                            # Búsqueda normal de texto (Nombres, etc.)
-                            cols_to_search = [c for c in df_detalle.columns if df_detalle[c].dtype == 'object']
-                            if cols_to_search:
-                                mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in cols_to_search]).any(axis=1)
+                            # Buscar SOLO en columnas de Nombre del empleado
+                            name_cols = [c for c in df_detalle.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
+                            # Fallback si las columnas tienen un nombre ligeramente distinto
+                            if not name_cols:
+                                name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                            
+                            if name_cols:
+                                mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in name_cols]).any(axis=1)
                                 df_detalle = df_detalle[mask_search]
+                            else:
+                                df_detalle = df_detalle.iloc[0:0] # Vaciamos si no existe columna de nombre
 
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
@@ -745,7 +744,7 @@ if file1 is not None and file2 is not None:
                             search_eq = st.text_input(
                                 "2. Search Employee (Exact ID or Name):", 
                                 "", 
-                                placeholder="Type Full Name or Exact ID...", 
+                                placeholder="Type Name or Exact Global ID...", 
                                 key='search_equity'
                             )
 
@@ -783,23 +782,22 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
-                        # MOTOR DE BÚSQUEDA INTELIGENTE EN EQUITY
+                        # MOTOR DE BÚSQUEDA ACOTADO EN EQUITY
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
                             if term_eq.isdigit() and 'Global ID' in df_equity_filtered.columns:
                                 mask_exact_eq = df_equity_filtered['Global ID'].astype(str).str.replace(r'\.0$', '', regex=True) == term_eq
-                                if mask_exact_eq.any():
-                                    df_equity_filtered = df_equity_filtered[mask_exact_eq]
-                                else:
-                                    cols_to_search_eq = [c for c in df_equity_filtered.columns if df_equity_filtered[c].dtype == 'object']
-                                    if cols_to_search_eq:
-                                        mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in cols_to_search_eq]).any(axis=1)
-                                        df_equity_filtered = df_equity_filtered[mask_search_eq]
+                                df_equity_filtered = df_equity_filtered[mask_exact_eq]
                             else:
-                                cols_to_search_eq = [c for c in df_equity_filtered.columns if df_equity_filtered[c].dtype == 'object']
-                                if cols_to_search_eq:
-                                    mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in cols_to_search_eq]).any(axis=1)
+                                name_cols_eq = [c for c in df_equity_filtered.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
+                                if not name_cols_eq:
+                                    name_cols_eq = [c for c in df_equity_filtered.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                                
+                                if name_cols_eq:
+                                    mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in name_cols_eq]).any(axis=1)
                                     df_equity_filtered = df_equity_filtered[mask_search_eq]
+                                else:
+                                    df_equity_filtered = df_equity_filtered.iloc[0:0]
                             
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your criteria.")
