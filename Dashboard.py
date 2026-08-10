@@ -203,7 +203,7 @@ if file1 is not None and file2 is not None:
                 
                 st.table(cost_df)
                 
-                # --- NUEVA SECCIÓN: DESGLOSE DE COSTOS (BREAKDOWN) ---
+                # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
                 
@@ -442,7 +442,7 @@ if file1 is not None and file2 is not None:
 
                 # --- DYNAMIC STAFF TABLE ---
                 st.subheader("👥 Employee Detailed List & Alerts")
-                col_filt1, col_filt2 = st.columns(2)
+                col_filt1, col_filt2, col_filt3 = st.columns(3) # AHORA SON 3 COLUMNAS DE FILTROS
                 
                 with col_filt1:
                     opcion_detalle = st.radio(
@@ -463,6 +463,15 @@ if file1 is not None and file2 is not None:
                             "🟡 Yellow Alerts Only (Notice)"
                         ],
                         key='sel_alert'
+                    )
+
+                with col_filt3:
+                    # NUEVA BARRA DE BÚSQUEDA
+                    search_emp = st.text_input(
+                        "3. Search Employee (Name or ID):", 
+                        "", 
+                        placeholder="Type here to search...", 
+                        key='search_salary'
                     )
                 
                 if opcion_detalle == "Adjustment Only":
@@ -544,6 +553,13 @@ if file1 is not None and file2 is not None:
                     elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
                         df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
+                    # APLICAR MOTOR DE BÚSQUEDA GLOBLAL EN LA TABLA SALARY
+                    if search_emp.strip() and not df_detalle.empty:
+                        term = search_emp.strip()
+                        # Busca en todas las columnas como string
+                        mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in df_detalle.columns]).any(axis=1)
+                        df_detalle = df_detalle[mask_search]
+
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
                         
@@ -566,7 +582,7 @@ if file1 is not None and file2 is not None:
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
                         st.dataframe(df_estilizado, use_container_width=True)
                     else:
-                        st.info("No employees match the selected alert color.")
+                        st.info("No employees match your filters or search term.")
                 else:
                     st.info("No employees match the selected Movement Type.")
 
@@ -649,7 +665,7 @@ if file1 is not None and file2 is not None:
                             """
                             st.markdown(summary_html, unsafe_allow_html=True)
                             
-                        # --- NUEVA SECCIÓN: DESGLOSE DE EQUITY (BREAKDOWN) ---
+                        # --- DESGLOSE DE EQUITY (BREAKDOWN) ---
                         st.markdown("### 🏢 Equity Breakdown (By Org & Function)")
                         tab_eq_org, tab_eq_func = st.tabs(["By Reporting Organization", "By Function"])
                         
@@ -693,7 +709,10 @@ if file1 is not None and file2 is not None:
                                 
                         st.markdown("---")
                             
-                        st.markdown("##### Filter Employees Table")
+                        st.markdown("### 👥 Eligible Employees List")
+                        
+                        col_eq_filt1, col_eq_filt2 = st.columns(2)
+                        
                         opciones_conceptos = [
                             "0%", 
                             "Below 100%", 
@@ -702,11 +721,20 @@ if file1 is not None and file2 is not None:
                             "Above Midpoint w/o Comments"
                         ]
                         
-                        seleccion_conceptos = st.multiselect(
-                            "Select Categories to display below:", 
-                            options=opciones_conceptos, 
-                            default=[]
-                        )
+                        with col_eq_filt1:
+                            seleccion_conceptos = st.multiselect(
+                                "Select Categories to display below:", 
+                                options=opciones_conceptos, 
+                                default=[]
+                            )
+                        
+                        with col_eq_filt2:
+                            search_eq = st.text_input(
+                                "Search Employee (Name or ID):", 
+                                "", 
+                                placeholder="Type here to search...", 
+                                key='search_equity'
+                            )
 
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
@@ -737,15 +765,19 @@ if file1 is not None and file2 is not None:
 
                         df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        st.markdown("### 👥 Eligible Employees List")
-                        
                         if seleccion_conceptos:
                             df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
+                        # APLICAR MOTOR DE BÚSQUEDA GLOBLAL EN LA TABLA EQUITY
+                        if search_eq.strip() and not df_equity_filtered.empty:
+                            term_eq = search_eq.strip()
+                            mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in df_equity_filtered.columns]).any(axis=1)
+                            df_equity_filtered = df_equity_filtered[mask_search_eq]
+                            
                         if not df_equity_filtered.empty:
-                            st.write(f"Showing **{len(df_equity_filtered)}** employees based on your category filter.")
+                            st.write(f"Showing **{len(df_equity_filtered)}** employees based on your criteria.")
                             
                             cols_eq = list(df_equity_filtered.columns)
                             if 'ALERT_CATEGORY' in cols_eq:
@@ -773,7 +805,10 @@ if file1 is not None and file2 is not None:
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
                             st.dataframe(df_eq_styled, use_container_width=True)
                         else:
-                            st.info("Select one or more categories above to view employee details in this table.")
+                            if seleccion_conceptos:
+                                st.info("No employees match your search term in the selected categories.")
+                            else:
+                                st.info("Select one or more categories above to view employee details in this table.")
 
                     else:
                         st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
