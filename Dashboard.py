@@ -164,11 +164,53 @@ if file1 is not None and file2 is not None:
             (df['Compensation Area'].isin(filtros_finales_comps)) &
             (df['Employee Subgroup'].isin(filtros_finales_subgroups)) &
             (df['Potential'].isin(filtros_finales_potentials))
-        ]
+        ].copy()
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
         
         FECHA_ACTUAL = pd.to_datetime('2026-07-23')
+
+        # --- CÁLCULOS GLOBALES (YEARS EN SG Y QUARTILE) ---
+        col_date_sg = None
+        col_new_qrtle = None
+        
+        for c in df_filtered.columns:
+            c_lower = str(c).lower().strip()
+            if 'date in sg' in c_lower or 'date in salary group' in c_lower:
+                col_date_sg = c
+            elif 'new qrtle' in c_lower or 'new quartile' in c_lower or 'quartile' in c_lower:
+                if 'current' not in c_lower:
+                    col_new_qrtle = c
+                    
+        # Fallback a índices
+        if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
+        if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
+
+        if col_date_sg and not df_filtered.empty:
+            df_filtered['Date_in_SG_clean'] = df_filtered[col_date_sg].apply(get_date)
+            df_filtered['Years_Raw'] = ((FECHA_ACTUAL - df_filtered['Date_in_SG_clean']).dt.days / 365.25)
+            
+            def format_years(x):
+                if pd.isna(x) or x < 0: return "Unknown"
+                val = int(x)
+                if val == 0: return "< 1 Year"
+                elif val == 1: return "1 Year"
+                else: return f"{val} Years"
+                
+            df_filtered['Years in SG'] = df_filtered['Years_Raw'].apply(format_years)
+        else:
+            df_filtered['Years in SG'] = "Unknown"
+
+        if col_new_qrtle and not df_filtered.empty:
+            mapeo_q = {
+                "Below Minimum": "Below Min", "Below Min": "Below Min",
+                "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
+                "AboveMax": "Above max", "Above max": "Above max"
+            }
+            df_filtered['New Quartile'] = df_filtered[col_new_qrtle].astype(str).str.strip().replace(mapeo_q)
+        else:
+            df_filtered['New Quartile'] = "Unknown"
+
 
         if df_filtered.empty:
             st.warning("No data matches these filters.")
@@ -389,53 +431,29 @@ if file1 is not None and file2 is not None:
 
                 with col5:
                     fig5, ax5 = plt.subplots(figsize=(7, 6))
-                    col_w_idx = 22
-                    col_ax_idx = 49
                     
-                    if total_personas > 0 and len(df_filtered.columns) > max(col_w_idx, col_ax_idx):
-                        col_w_name = df_filtered.columns[col_w_idx]
-                        col_ax_name = df_filtered.columns[col_ax_idx]
-                        data_w = df_filtered.iloc[:, col_w_idx].astype(str).str.strip()
-                        data_ax = df_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
-                        
-                        mapeo = {
-                            "Below Minimum": "Below Min", "Below Min": "Below Min",
-                            "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
-                            "AboveMax": "Above max", "Above max": "Above max"
-                        }
-                        data_w = data_w.replace(mapeo)
-                        data_ax = data_ax.replace(mapeo)
-                        
-                        counts_w = data_w.value_counts()
-                        counts_ax = data_ax.value_counts()
-                        
+                    if not df_filtered.empty and 'New Quartile' in df_filtered.columns:
+                        counts_q = df_filtered['New Quartile'].value_counts()
                         final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                        val_w = [counts_w.get(c, 0) for c in final_order]
-                        val_ax = [counts_ax.get(c, 0) for c in final_order]
+                        val_q = [counts_q.get(c, 0) for c in final_order]
                         
                         x_pos = np.arange(len(final_order))
-                        ancho_barra = 0.35
+                        bars_q = ax5.bar(x_pos, val_q, 0.5, color='#87cefa')
                         
-                        bars_w = ax5.bar(x_pos - ancho_barra/2, val_w, ancho_barra, label=str(col_w_name)[:20], color='#ffb347')
-                        bars_ax = ax5.bar(x_pos + ancho_barra/2, val_ax, ancho_barra, label=str(col_ax_name)[:20], color='#87cefa')
-                        
-                        max_y = max(max(val_w, default=0), max(val_ax, default=0))
+                        max_y = max(val_q, default=0)
                         if max_y == 0: max_y = 1
                         
-                        ax5.bar_label(bars_w, padding=3, fontsize=9, color='#333333')
-                        ax5.bar_label(bars_ax, padding=3, fontsize=9, color='#333333')
-                        
+                        ax5.bar_label(bars_q, padding=3, fontsize=9, color='#333333')
                         ax5.set_xticks(x_pos)
                         ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
-                        ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
-                        ax5.set_title('Hipos distribution', fontweight='bold', pad=15)
+                        ax5.set_title('Overall Quartile Distribution', fontweight='bold', pad=15)
                         ax5.set_ylabel('Employees')
                         ax5.set_ylim(0, max_y * 1.15)
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
                         fig5.tight_layout()
                     else:
-                        ax5.text(0.5, 0.5, "Columns missing", ha='center', va='center')
+                        ax5.text(0.5, 0.5, "Quartile Column missing", ha='center', va='center')
                     st.pyplot(fig5)
 
                 with col6:
@@ -470,91 +488,47 @@ if file1 is not None and file2 is not None:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
                 
-                # 1. Filtrar asegurando usar el nombre real de "Potential"
                 mask_pot = df_filtered['Potential'].astype(str).str.strip().str.lower().isin(['high potential', 'strategic few'])
                 df_pot_filtered = df_filtered[mask_pot].copy()
                 
-                if not df_pot_filtered.empty:
-                    # Buscar nombres de columna exactos dinámicamente para evitar fallos si el Excel cambia
-                    col_date_sg = None
-                    col_new_qrtle = None
+                if not df_pot_filtered.empty and 'Years in SG' in df_pot_filtered.columns and 'New Quartile' in df_pot_filtered.columns:
+                    orden_qrtle = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
+                    pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Quartile'])
                     
-                    for c in df_pot_filtered.columns:
-                        c_lower = str(c).lower().strip()
-                        if 'date in sg' in c_lower or 'date in salary group' in c_lower:
-                            col_date_sg = c
-                        elif 'new qrtle' in c_lower or 'new quartile' in c_lower or 'quartile' in c_lower:
-                            if 'current' not in c_lower:
-                                col_new_qrtle = c
-                                
-                    # Fallback a índices si no encontró el nombre
-                    if not col_date_sg and len(df_pot_filtered.columns) > 25: col_date_sg = df_pot_filtered.columns[25]
-                    if not col_new_qrtle and len(df_pot_filtered.columns) > 49: col_new_qrtle = df_pot_filtered.columns[49]
+                    cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
+                    otras_cols = [c for c in pivot_df.columns if c not in orden_qrtle]
+                    pivot_df = pivot_df[cols_presentes + otras_cols]
                     
-                    if col_date_sg and col_new_qrtle:
-                        # Convertir a fechas y calcular Años
-                        df_pot_filtered['Date_in_SG_clean'] = df_pot_filtered[col_date_sg].apply(get_date)
-                        df_pot_filtered['Years_Raw'] = ((FECHA_ACTUAL - df_pot_filtered['Date_in_SG_clean']).dt.days / 365.25)
-                        
-                        def format_years(x):
-                            if pd.isna(x) or x < 0: return "Unknown"
-                            val = int(x)
-                            if val == 0: return "< 1 Year"
-                            elif val == 1: return "1 Year"
-                            else: return f"{val} Years"
-                            
-                        df_pot_filtered['Years in SG'] = df_pot_filtered['Years_Raw'].apply(format_years)
-                        
-                        # Estandarizar Cuartiles
-                        mapeo_q = {
-                            "Below Minimum": "Below Min", "Below Min": "Below Min",
-                            "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
-                            "AboveMax": "Above max", "Above max": "Above max"
-                        }
-                        df_pot_filtered['New Quartile'] = df_pot_filtered[col_new_qrtle].astype(str).str.strip().replace(mapeo_q)
-                        
-                        orden_qrtle = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                        pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Quartile'])
-                        
-                        cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
-                        otras_cols = [c for c in pivot_df.columns if c not in orden_qrtle]
-                        pivot_df = pivot_df[cols_presentes + otras_cols]
-                        
-                        # Ordenar eje X para que los años se vean en orden consecutivo
-                        def sort_years(idx):
-                            if "Unknown" in idx: return 999
-                            if "< 1" in idx: return 0
-                            try: return int(idx.split()[0])
-                            except: return 999
-                        
-                        pivot_df = pivot_df.loc[sorted(pivot_df.index, key=sort_years)]
-                        
-                        fig_new, ax_new = plt.subplots(figsize=(10, 5))
-                        bars = pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis', width=0.8)
-                        
-                        # ETIQUETAS SOBRE LAS BARRAS (Contador de Empleados)
-                        for container in ax_new.containers:
-                            labels = [f'{int(v)}' if v > 0 else '' for v in container.datavalues]
-                            ax_new.bar_label(container, labels=labels, padding=3, fontsize=9, color='#333333')
-                        
-                        ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
-                        ax_new.set_ylabel("Number of Employees")
-                        ax_new.set_xlabel("Years in Subgroup")
-                        
-                        ax_new.spines['top'].set_visible(False)
-                        ax_new.spines['right'].set_visible(False)
-                        
-                        max_y = pivot_df.values.max() if not pivot_df.empty else 1
-                        ax_new.set_ylim(0, max_y * 1.15)
-                        
-                        plt.xticks(rotation=0)
-                        ax_new.legend(title="New Quartile", bbox_to_anchor=(1.05, 1), loc='upper left')
-                        fig_new.tight_layout()
-                        
-                        st.pyplot(fig_new)
-                        
-                    else:
-                        st.error("Missing columns for 'Date in SG' or 'New Qrtle'.")
+                    def sort_years(idx):
+                        if "Unknown" in idx: return 999
+                        if "< 1" in idx: return 0
+                        try: return int(idx.split()[0])
+                        except: return 999
+                    
+                    pivot_df = pivot_df.loc[sorted(pivot_df.index, key=sort_years)]
+                    
+                    fig_new, ax_new = plt.subplots(figsize=(10, 5))
+                    bars = pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis', width=0.8)
+                    
+                    for container in ax_new.containers:
+                        labels = [f'{int(v)}' if v > 0 else '' for v in container.datavalues]
+                        ax_new.bar_label(container, labels=labels, padding=3, fontsize=9, color='#333333')
+                    
+                    ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
+                    ax_new.set_ylabel("Number of Employees")
+                    ax_new.set_xlabel("Years in Subgroup")
+                    
+                    ax_new.spines['top'].set_visible(False)
+                    ax_new.spines['right'].set_visible(False)
+                    
+                    max_y = pivot_df.values.max() if not pivot_df.empty else 1
+                    ax_new.set_ylim(0, max_y * 1.15)
+                    
+                    plt.xticks(rotation=0)
+                    ax_new.legend(title="New Quartile", bbox_to_anchor=(1.05, 1), loc='upper left')
+                    fig_new.tight_layout()
+                    
+                    st.pyplot(fig_new)
                 else:
                     st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
                 
@@ -562,6 +536,8 @@ if file1 is not None and file2 is not None:
 
                 # --- DYNAMIC STAFF TABLE ---
                 st.subheader("👥 Employee Detailed List & Alerts")
+                
+                # Fila 1 de Filtros (Movimiento, Alertas, Búsqueda)
                 col_filt1, col_filt2, col_filt3 = st.columns(3)
                 
                 with col_filt1:
@@ -592,20 +568,42 @@ if file1 is not None and file2 is not None:
                         placeholder="Type Name or Exact Global ID...", 
                         key='search_salary'
                     )
+
+                # Fila 2 de Filtros (Años en SG y Quartile)
+                col_filt4, col_filt5 = st.columns(2)
                 
-                if opcion_detalle == "Adjustment Only":
-                    mask = solo_adj
-                elif opcion_detalle == "Promotion Only":
-                    mask = solo_promo
-                elif opcion_detalle == "Both":
-                    mask = ambos
-                elif opcion_detalle == "No Movement":
-                    mask = sin_mov
-                else:
-                    mask = pd.Series(True, index=df_filtered.index)
+                def sort_years_opts(x):
+                    if x == "Unknown": return 999
+                    if "< 1" in x: return 0
+                    try: return int(x.split()[0])
+                    except: return 999
+                    
+                with col_filt4:
+                    opts_years = sorted(df_filtered['Years in SG'].unique().tolist(), key=sort_years_opts)
+                    selected_years = st.multiselect("4. Filter by Years in SG:", options=opts_years, default=[])
+                    
+                with col_filt5:
+                    base_qrtles = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max", "Unknown"]
+                    opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].unique().tolist()]
+                    # Agregar cualquier otro que haya aparecido
+                    opts_qrtle += [q for q in df_filtered['New Quartile'].unique().tolist() if q not in opts_qrtle]
+                    selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[])
+
+                # APLICACIÓN DE FILTROS AL DF
+                if opcion_detalle == "Adjustment Only": mask = solo_adj
+                elif opcion_detalle == "Promotion Only": mask = solo_promo
+                elif opcion_detalle == "Both": mask = ambos
+                elif opcion_detalle == "No Movement": mask = sin_mov
+                else: mask = pd.Series(True, index=df_filtered.index)
                     
                 df_detalle = df_filtered[mask].copy()
                 df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
+                
+                # Filtros de Years y Quartile
+                if selected_years:
+                    df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
+                if selected_qrtle:
+                    df_detalle = df_detalle[df_detalle['New Quartile'].isin(selected_qrtle)]
 
                 def evaluar_alertas(row):
                     comentarios = []
@@ -673,12 +671,10 @@ if file1 is not None and file2 is not None:
                     # MOTOR DE BÚSQUEDA ACOTADO (ID Exacto o solo columna Name)
                     if search_emp.strip() and not df_detalle.empty:
                         term = search_emp.strip()
-                        # Si es número, buscar SOLO en Global ID (Exacto)
                         if term.isdigit() and 'Global ID' in df_detalle.columns:
                             mask_exact = df_detalle['Global ID'].astype(str).str.replace(r'\.0$', '', regex=True) == term
                             df_detalle = df_detalle[mask_exact]
                         else:
-                            # Buscar SOLO en columnas de Nombre del empleado
                             name_cols = [c for c in df_detalle.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
                             if not name_cols:
                                 name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
@@ -697,8 +693,10 @@ if file1 is not None and file2 is not None:
                             columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
                             df_detalle = df_detalle[columnas_todas]
                         
+                        # Limpiar columnas temporales
+                        cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'New Quartile']
+                        df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         colores_array = df_detalle['RowColor'].values
-                        df_visual = df_detalle.drop(columns=['RowColor'])
                         
                         cols_fijas = list(df_visual.columns[:4])
                         df_visual = df_visual.set_index(cols_fijas)
@@ -713,7 +711,7 @@ if file1 is not None and file2 is not None:
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
-                    st.info("No employees match the selected Movement Type.")
+                    st.info("No employees match the selected Movement Type or Years/Quartile filters.")
 
 
             # ==========================================
@@ -926,8 +924,12 @@ if file1 is not None and file2 is not None:
 
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             
-                            cols_fijas_eq = list(df_equity_filtered.columns[:4])
-                            df_visual_eq = df_equity_filtered.set_index(cols_fijas_eq)
+                            # Limpiar columnas temporales
+                            cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'New Quartile']
+                            df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
+                            
+                            cols_fijas_eq = list(df_visual_eq.columns[:4])
+                            df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
