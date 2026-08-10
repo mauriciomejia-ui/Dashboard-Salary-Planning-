@@ -510,7 +510,7 @@ if file1 is not None and file2 is not None:
                                 ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
                                          f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
                                 
-                            ax6.set_title('Gender Split', fontweight='bold', pad=15)
+                            ax6.set_title('Movements by Gender Split', fontweight='bold', pad=15)
                             ax6.set_ylabel('Employees')
                             ax6.spines['top'].set_visible(False)
                             ax6.spines['right'].set_visible(False)
