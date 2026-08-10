@@ -170,20 +170,23 @@ if file1 is not None and file2 is not None:
         
         FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
-        # --- CÁLCULOS GLOBALES (YEARS EN SG Y QUARTILE) ---
+        # --- CÁLCULOS GLOBALES (YEARS EN SG Y QUARTILES) ---
         col_date_sg = None
+        col_curr_qrtle = None
         col_new_qrtle = None
         
         for c in df_filtered.columns:
             c_lower = str(c).lower().strip()
             if 'date in sg' in c_lower or 'date in salary group' in c_lower:
                 col_date_sg = c
-            elif 'new qrtle' in c_lower or 'new quartile' in c_lower or 'quartile' in c_lower:
-                if 'current' not in c_lower:
-                    col_new_qrtle = c
+            elif 'new qrtle' in c_lower or 'new quartile' in c_lower or ('quartile' in c_lower and 'new' in c_lower):
+                col_new_qrtle = c
+            elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
+                col_curr_qrtle = c
                     
-        # Fallback a índices
+        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
+        if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
 
         if col_date_sg and not df_filtered.empty:
@@ -201,12 +204,18 @@ if file1 is not None and file2 is not None:
         else:
             df_filtered['Years in SG'] = "Unknown"
 
+        mapeo_q = {
+            "Below Minimum": "Below Min", "Below Min": "Below Min",
+            "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
+            "AboveMax": "Above max", "Above max": "Above max"
+        }
+
+        if col_curr_qrtle and not df_filtered.empty:
+            df_filtered['Current Quartile'] = df_filtered[col_curr_qrtle].astype(str).str.strip().replace(mapeo_q)
+        else:
+            df_filtered['Current Quartile'] = "Unknown"
+
         if col_new_qrtle and not df_filtered.empty:
-            mapeo_q = {
-                "Below Minimum": "Below Min", "Below Min": "Below Min",
-                "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
-                "AboveMax": "Above max", "Above max": "Above max"
-            }
             df_filtered['New Quartile'] = df_filtered[col_new_qrtle].astype(str).str.strip().replace(mapeo_q)
         else:
             df_filtered['New Quartile'] = "Unknown"
@@ -337,12 +346,10 @@ if file1 is not None and file2 is not None:
                 total_personas = len(df_filtered)
                 num_movimientos = num_solo_adj + num_solo_promo + num_ambos
 
-                # FUNCIÓN PARA CREAR LABELS INTELIGENTES EN LOS PASTELES (Sin empalmes)
                 def make_autopct(values):
                     def my_autopct(pct):
                         total = sum(values)
                         val = int(round(pct * total / 100.0))
-                        # Mostrar texto solo si la rebanada es mayor a 5%
                         return f'{val}\n({pct:.1f}%)' if pct >= 5 else ''
                     return my_autopct
 
@@ -467,20 +474,32 @@ if file1 is not None and file2 is not None:
                 col5, col6 = st.columns(2)
 
                 with col5:
+                    # --- NUEVA GRÁFICA: CURRENT QRTLE vs NEW QRTLE (Lado a lado) ---
                     fig5, ax5 = plt.subplots(figsize=(7, 6))
                     
-                    if not df_filtered.empty and 'New Quartile' in df_filtered.columns:
-                        counts_q = df_filtered['New Quartile'].value_counts()
+                    if not df_filtered.empty and 'Current Quartile' in df_filtered.columns and 'New Quartile' in df_filtered.columns:
+                        counts_curr = df_filtered['Current Quartile'].value_counts()
+                        counts_new = df_filtered['New Quartile'].value_counts()
+                        
                         final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                        val_q = [counts_q.get(c, 0) for c in final_order]
+                        val_curr = [counts_curr.get(c, 0) for c in final_order]
+                        val_new = [counts_new.get(c, 0) for c in final_order]
                         
                         x_pos = np.arange(len(final_order))
-                        bars_q = ax5.bar(x_pos, val_q, 0.5, color='#87cefa')
+                        ancho_barra = 0.35
                         
-                        max_y = max(val_q, default=0)
+                        label_curr = str(col_curr_qrtle)[:20] if col_curr_qrtle else 'Current Qrtle'
+                        label_new = str(col_new_qrtle)[:20] if col_new_qrtle else 'New Qrtle'
+                        
+                        bars_curr = ax5.bar(x_pos - ancho_barra/2, val_curr, ancho_barra, label=label_curr, color='#ffb347')
+                        bars_new = ax5.bar(x_pos + ancho_barra/2, val_new, ancho_barra, label=label_new, color='#87cefa')
+                        
+                        max_y = max(max(val_curr, default=0), max(val_new, default=0))
                         if max_y == 0: max_y = 1
                         
-                        ax5.bar_label(bars_q, padding=3, fontsize=9, color='#333333')
+                        ax5.bar_label(bars_curr, padding=3, fontsize=9, color='#333333')
+                        ax5.bar_label(bars_new, padding=3, fontsize=9, color='#333333')
+                        
                         ax5.set_xticks(x_pos)
                         ax5.set_xticklabels(final_order, rotation=45, ha='right', fontsize=9)
                         ax5.set_title('Overall Quartile Distribution', fontweight='bold', pad=15)
@@ -488,9 +507,10 @@ if file1 is not None and file2 is not None:
                         ax5.set_ylim(0, max_y * 1.15)
                         ax5.spines['top'].set_visible(False)
                         ax5.spines['right'].set_visible(False)
+                        ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
                         fig5.tight_layout()
                     else:
-                        ax5.text(0.5, 0.5, "Quartile Column missing", ha='center', va='center')
+                        ax5.text(0.5, 0.5, "Quartile Columns missing", ha='center', va='center')
                     st.pyplot(fig5)
 
                 with col6:
@@ -729,7 +749,7 @@ if file1 is not None and file2 is not None:
                             columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
                             df_detalle = df_detalle[columnas_todas]
                         
-                        cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw']
+                        cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         colores_array = df_detalle['RowColor'].values
                         
@@ -937,6 +957,7 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
+                        # MOTOR DE BÚSQUEDA ACOTADO EN EQUITY
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
                             if term_eq.isdigit() and 'Global ID' in df_equity_filtered.columns:
@@ -964,7 +985,7 @@ if file1 is not None and file2 is not None:
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             
                             # Limpiar temporales
-                            cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'New Quartile']
+                            cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
                             cols_fijas_eq = list(df_visual_eq.columns[:4])
