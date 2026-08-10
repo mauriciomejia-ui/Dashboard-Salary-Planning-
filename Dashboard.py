@@ -223,7 +223,6 @@ if file1 is not None and file2 is not None:
             with tab_salary:
                 st.subheader("💰 Cost Summary")
                 
-                # Input Dinámico para el Target de Budget
                 col_b1, col_b2 = st.columns([1, 3])
                 with col_b1:
                     budget_pct = st.number_input("🎯 Set Target Budget %:", min_value=0.0, max_value=100.0, value=3.0, step=0.1)
@@ -338,6 +337,15 @@ if file1 is not None and file2 is not None:
                 total_personas = len(df_filtered)
                 num_movimientos = num_solo_adj + num_solo_promo + num_ambos
 
+                # FUNCIÓN PARA CREAR LABELS INTELIGENTES EN LOS PASTELES (Sin empalmes)
+                def make_autopct(values):
+                    def my_autopct(pct):
+                        total = sum(values)
+                        val = int(round(pct * total / 100.0))
+                        # Mostrar texto solo si la rebanada es mayor a 5%
+                        return f'{val}\n({pct:.1f}%)' if pct >= 5 else ''
+                    return my_autopct
+
                 st.subheader("📊 Graphical Summary")
                 col1, col2 = st.columns(2)
                 
@@ -351,9 +359,17 @@ if file1 is not None and file2 is not None:
                             sizes = [num_movimientos, total_personas - num_movimientos]
                             labels = ['With Movement', 'No Movement']
                             colors = ['#ff9999', '#d3d3d3']
-                            wedges, _ = ax1.pie(sizes, startangle=90, colors=colors)
+                            
+                            wedges, texts, autotexts = ax1.pie(
+                                sizes, startangle=90, colors=colors, 
+                                autopct=make_autopct(sizes), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
+                            
                             leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                             ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                        
                         ax1.axis('equal') 
                         ax1.set_title('Overall Movement', fontweight='bold', pad=15)
                     else:
@@ -365,13 +381,20 @@ if file1 is not None and file2 is not None:
                     raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                     raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
                     raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
+                    
                     sizes2 = [s for s in raw_sizes2 if s > 0]
                     labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
                     colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
                     total_chart2 = sum(sizes2)
                     
                     if total_chart2 > 0:
-                        wedges2, _ = ax2.pie(sizes2, startangle=90, colors=colors2)
+                        wedges2, texts2, autotexts2 = ax2.pie(
+                            sizes2, startangle=90, colors=colors2,
+                            autopct=make_autopct(sizes2), pctdistance=0.65,
+                            wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                            textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                        )
+                        
                         leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
                         ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         ax2.axis('equal')
@@ -394,7 +417,14 @@ if file1 is not None and file2 is not None:
                         
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                            wedges3, _ = ax3.pie(reason_counts, startangle=90, colors=colores_motivos)
+                            
+                            wedges3, texts3, autotexts3 = ax3.pie(
+                                reason_counts.values, startangle=90, colors=colores_motivos,
+                                autopct=make_autopct(reason_counts.values), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
+                            
                             leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                             ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax3.axis('equal')
@@ -415,7 +445,14 @@ if file1 is not None and file2 is not None:
                         
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
-                            wedges4, _ = ax4.pie(pot_counts, startangle=90, colors=colores_pot)
+                            
+                            wedges4, texts4, autotexts4 = ax4.pie(
+                                pot_counts.values, startangle=90, colors=colores_pot,
+                                autopct=make_autopct(pot_counts.values), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
+                            
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
                             ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax4.axis('equal')
@@ -585,7 +622,6 @@ if file1 is not None and file2 is not None:
                 with col_filt5:
                     base_qrtles = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max", "Unknown"]
                     opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].unique().tolist()]
-                    # Agregar cualquier otro que haya aparecido
                     opts_qrtle += [q for q in df_filtered['New Quartile'].unique().tolist() if q not in opts_qrtle]
                     selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[])
 
@@ -668,7 +704,7 @@ if file1 is not None and file2 is not None:
                     elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
                         df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
-                    # MOTOR DE BÚSQUEDA ACOTADO (ID Exacto o solo columna Name)
+                    # MOTOR DE BÚSQUEDA ACOTADO
                     if search_emp.strip() and not df_detalle.empty:
                         term = search_emp.strip()
                         if term.isdigit() and 'Global ID' in df_detalle.columns:
@@ -693,8 +729,7 @@ if file1 is not None and file2 is not None:
                             columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
                             df_detalle = df_detalle[columnas_todas]
                         
-                        # Limpiar columnas temporales
-                        cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'New Quartile']
+                        cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         colores_array = df_detalle['RowColor'].values
                         
@@ -757,7 +792,12 @@ if file1 is not None and file2 is not None:
                             
                             fig_eq, ax_eq = plt.subplots(figsize=(5, 4))
                             if sum(pie_sizes) > 0:
-                                wedges_eq, _ = ax_eq.pie(pie_sizes, startangle=90, colors=pie_colors)
+                                wedges_eq, texts_eq, autotexts_eq = ax_eq.pie(
+                                    pie_sizes, startangle=90, colors=pie_colors,
+                                    autopct=make_autopct(pie_sizes), pctdistance=0.65,
+                                    wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                    textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                                )
                                 leyenda_eq = [f"{l} - {s}" for l, s in zip(pie_labels, pie_sizes)]
                                 ax_eq.legend(wedges_eq, leyenda_eq, title="Distribution", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                                 ax_eq.axis('equal')
@@ -897,7 +937,6 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
-                        # MOTOR DE BÚSQUEDA ACOTADO EN EQUITY
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
                             if term_eq.isdigit() and 'Global ID' in df_equity_filtered.columns:
@@ -924,7 +963,7 @@ if file1 is not None and file2 is not None:
 
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             
-                            # Limpiar columnas temporales
+                            # Limpiar temporales
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
