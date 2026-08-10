@@ -168,7 +168,6 @@ if file1 is not None and file2 is not None:
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
         
-        # FECHA MAESTRA PARA LOS CÁLCULOS (Years in SG y Alertas)
         FECHA_ACTUAL = pd.to_datetime('2026-07-23')
 
         if df_filtered.empty:
@@ -471,63 +470,93 @@ if file1 is not None and file2 is not None:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
                 
-                col_y_idx = 24  # Potential
-                col_z_idx = 25  # Date in SG
-                col_ax_idx = 49 # New Qrtle / AX
+                # 1. Filtrar asegurando usar el nombre real de "Potential"
+                mask_pot = df_filtered['Potential'].astype(str).str.strip().str.lower().isin(['high potential', 'strategic few'])
+                df_pot_filtered = df_filtered[mask_pot].copy()
                 
-                if len(df_filtered.columns) > max(col_y_idx, col_z_idx, col_ax_idx):
-                    df_pot = df_filtered.copy()
-                    df_pot['Pot_Filter'] = df_pot.iloc[:, col_y_idx].astype(str).str.strip().str.lower()
-                    mask_pot = df_pot['Pot_Filter'].isin(['high potential', 'strategic few'])
-                    df_pot_filtered = df_pot[mask_pot].copy()
+                if not df_pot_filtered.empty:
+                    # Buscar nombres de columna exactos dinámicamente para evitar fallos si el Excel cambia
+                    col_date_sg = None
+                    col_new_qrtle = None
                     
-                    if not df_pot_filtered.empty:
-                        df_pot_filtered['Date_in_SG'] = df_pot_filtered.iloc[:, col_z_idx].apply(get_date)
-                        df_pot_filtered['Years_Raw'] = ((FECHA_ACTUAL - df_pot_filtered['Date_in_SG']).dt.days / 365.25)
-                        df_pot_filtered['Years in SG'] = df_pot_filtered['Years_Raw'].apply(lambda x: f"{int(x)} Years" if pd.notna(x) else "Unknown")
+                    for c in df_pot_filtered.columns:
+                        c_lower = str(c).lower().strip()
+                        if 'date in sg' in c_lower or 'date in salary group' in c_lower:
+                            col_date_sg = c
+                        elif 'new qrtle' in c_lower or 'new quartile' in c_lower or 'quartile' in c_lower:
+                            if 'current' not in c_lower:
+                                col_new_qrtle = c
+                                
+                    # Fallback a índices si no encontró el nombre
+                    if not col_date_sg and len(df_pot_filtered.columns) > 25: col_date_sg = df_pot_filtered.columns[25]
+                    if not col_new_qrtle and len(df_pot_filtered.columns) > 49: col_new_qrtle = df_pot_filtered.columns[49]
+                    
+                    if col_date_sg and col_new_qrtle:
+                        # Convertir a fechas y calcular Años
+                        df_pot_filtered['Date_in_SG_clean'] = df_pot_filtered[col_date_sg].apply(get_date)
+                        df_pot_filtered['Years_Raw'] = ((FECHA_ACTUAL - df_pot_filtered['Date_in_SG_clean']).dt.days / 365.25)
                         
-                        df_pot_filtered['New Qrtle'] = df_pot_filtered.iloc[:, col_ax_idx].astype(str).str.strip()
+                        def format_years(x):
+                            if pd.isna(x) or x < 0: return "Unknown"
+                            val = int(x)
+                            if val == 0: return "< 1 Year"
+                            elif val == 1: return "1 Year"
+                            else: return f"{val} Years"
+                            
+                        df_pot_filtered['Years in SG'] = df_pot_filtered['Years_Raw'].apply(format_years)
+                        
+                        # Estandarizar Cuartiles
                         mapeo_q = {
                             "Below Minimum": "Below Min", "Below Min": "Below Min",
                             "1Q": "1Q", "2Q": "2Q", "3Q": "3Q", "4Q": "4Q",
                             "AboveMax": "Above max", "Above max": "Above max"
                         }
-                        df_pot_filtered['New Qrtle'] = df_pot_filtered['New Qrtle'].replace(mapeo_q)
+                        df_pot_filtered['New Quartile'] = df_pot_filtered[col_new_qrtle].astype(str).str.strip().replace(mapeo_q)
                         
                         orden_qrtle = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
+                        pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Quartile'])
                         
-                        # Crear tabla cruzada (pivot)
-                        pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Qrtle'])
-                        
-                        # Reordenar columnas según Quartile
                         cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
-                        pivot_df = pivot_df[cols_presentes]
+                        otras_cols = [c for c in pivot_df.columns if c not in orden_qrtle]
+                        pivot_df = pivot_df[cols_presentes + otras_cols]
                         
-                        # Ordenar filas por el número de años
+                        # Ordenar eje X para que los años se vean en orden consecutivo
                         def sort_years(idx):
+                            if "Unknown" in idx: return 999
+                            if "< 1" in idx: return 0
                             try: return int(idx.split()[0])
                             except: return 999
-                            
+                        
                         pivot_df = pivot_df.loc[sorted(pivot_df.index, key=sort_years)]
-
+                        
                         fig_new, ax_new = plt.subplots(figsize=(10, 5))
-                        pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis')
+                        bars = pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis', width=0.8)
+                        
+                        # ETIQUETAS SOBRE LAS BARRAS (Contador de Empleados)
+                        for container in ax_new.containers:
+                            labels = [f'{int(v)}' if v > 0 else '' for v in container.datavalues]
+                            ax_new.bar_label(container, labels=labels, padding=3, fontsize=9, color='#333333')
                         
                         ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
                         ax_new.set_ylabel("Number of Employees")
                         ax_new.set_xlabel("Years in Subgroup")
-                        plt.xticks(rotation=0)
+                        
                         ax_new.spines['top'].set_visible(False)
                         ax_new.spines['right'].set_visible(False)
-                        ax_new.legend(title="New Qrtle", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        
+                        max_y = pivot_df.values.max() if not pivot_df.empty else 1
+                        ax_new.set_ylim(0, max_y * 1.15)
+                        
+                        plt.xticks(rotation=0)
+                        ax_new.legend(title="New Quartile", bbox_to_anchor=(1.05, 1), loc='upper left')
                         fig_new.tight_layout()
                         
                         st.pyplot(fig_new)
+                        
                     else:
-                        st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
+                        st.error("Missing columns for 'Date in SG' or 'New Qrtle'.")
                 else:
-                    st.error("Columns for Date in SG or New Qrtle not found.")
-
+                    st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
                 
                 st.markdown("---")
 
