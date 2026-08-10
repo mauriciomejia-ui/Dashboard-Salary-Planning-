@@ -454,7 +454,7 @@ if file1 is not None and file2 is not None:
                             )
                             
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
-                            ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                            ax4.legend(wedges4, leyenda4, title="Movements by Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax4.axis('equal')
                             ax4.set_title('Potential Split', fontweight='bold', pad=15)
                         else:
