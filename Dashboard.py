@@ -5,6 +5,7 @@ import seaborn as sns
 import json
 import os
 import numpy as np
+import io
 
 # Page Configuration
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
@@ -224,12 +225,26 @@ if file1 is not None and file2 is not None:
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
-            tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
+            # ==========================================
+            # SECCIÓN DE EXPORTACIÓN Y PDF (SIDEBAR)
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("📄 Export Report")
+            pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
+            if pdf_mode:
+                st.sidebar.markdown(
+                    '<button onclick="window.print()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save Dashboard as PDF</button>',
+                    unsafe_allow_html=True
+                )
+                st.sidebar.info("Tip: In the print dialog, select 'Save as PDF', enable 'Background Graphics', and hide Headers/Footers.")
+
             # ==========================================
-            #           TAB 1: SALARY PLANNING
+            #           FUNCIÓN: SALARY PLANNING
             # ==========================================
-            with tab_salary:
+            def render_salary():
+                df_breakdown_org, df_breakdown_func, df_detalle = None, None, None
+                
                 st.subheader("💰 Cost Summary")
                 
                 col_b1, col_b2 = st.columns([1, 3])
@@ -296,7 +311,6 @@ if file1 is not None and file2 is not None:
                     
                     grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget Amount', 'Variance vs BGT', 'Status', 'Total % Increment']]
                     grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adjustment Cost', 'Promo_Cost': 'Growth Promo Cost'}, inplace=True)
-                    
                     return grp
                 
                 def color_salary_variance(row):
@@ -373,7 +387,6 @@ if file1 is not None and file2 is not None:
                                 wedgeprops=dict(edgecolor='white', linewidth=1.5),
                                 textprops=dict(fontsize=10, fontweight='bold', color='#333333')
                             )
-                            
                             leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                             ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         
@@ -401,7 +414,6 @@ if file1 is not None and file2 is not None:
                             wedgeprops=dict(edgecolor='white', linewidth=1.5),
                             textprops=dict(fontsize=10, fontweight='bold', color='#333333')
                         )
-                        
                         leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
                         ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         ax2.axis('equal')
@@ -424,14 +436,12 @@ if file1 is not None and file2 is not None:
                         
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                            
                             wedges3, texts3, autotexts3 = ax3.pie(
                                 reason_counts.values, startangle=90, colors=colores_motivos,
                                 autopct=make_autopct(reason_counts.values), pctdistance=0.65,
                                 wedgeprops=dict(edgecolor='white', linewidth=1.5),
                                 textprops=dict(fontsize=10, fontweight='bold', color='#333333')
                             )
-                            
                             leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                             ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax3.axis('equal')
@@ -452,14 +462,12 @@ if file1 is not None and file2 is not None:
                         
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
-                            
                             wedges4, texts4, autotexts4 = ax4.pie(
                                 pot_counts.values, startangle=90, colors=colores_pot,
                                 autopct=make_autopct(pot_counts.values), pctdistance=0.65,
                                 wedgeprops=dict(edgecolor='white', linewidth=1.5),
                                 textprops=dict(fontsize=10, fontweight='bold', color='#333333')
                             )
-                            
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
                             ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax4.axis('equal')
@@ -474,9 +482,7 @@ if file1 is not None and file2 is not None:
                 col5, col6 = st.columns(2)
 
                 with col5:
-                    # --- NUEVA GRÁFICA: CURRENT QRTLE vs NEW QRTLE (Lado a lado) ---
                     fig5, ax5 = plt.subplots(figsize=(7, 6))
-                    
                     if not df_filtered.empty and 'Current Quartile' in df_filtered.columns and 'New Quartile' in df_filtered.columns:
                         counts_curr = df_filtered['Current Quartile'].value_counts()
                         counts_new = df_filtered['New Quartile'].value_counts()
@@ -594,7 +600,6 @@ if file1 is not None and file2 is not None:
                 # --- DYNAMIC STAFF TABLE ---
                 st.subheader("👥 Employee Detailed List & Alerts")
                 
-                # Fila 1 de Filtros (Movimiento, Alertas, Búsqueda)
                 col_filt1, col_filt2, col_filt3 = st.columns(3)
                 
                 with col_filt1:
@@ -626,7 +631,6 @@ if file1 is not None and file2 is not None:
                         key='search_salary'
                     )
 
-                # Fila 2 de Filtros (Años en SG y Quartile)
                 col_filt4, col_filt5 = st.columns(2)
                 
                 def sort_years_opts(x):
@@ -645,7 +649,6 @@ if file1 is not None and file2 is not None:
                     opts_qrtle += [q for q in df_filtered['New Quartile'].unique().tolist() if q not in opts_qrtle]
                     selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[])
 
-                # APLICACIÓN DE FILTROS AL DF
                 if opcion_detalle == "Adjustment Only": mask = solo_adj
                 elif opcion_detalle == "Promotion Only": mask = solo_promo
                 elif opcion_detalle == "Both": mask = ambos
@@ -655,7 +658,6 @@ if file1 is not None and file2 is not None:
                 df_detalle = df_filtered[mask].copy()
                 df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
                 
-                # Filtros de Years y Quartile
                 if selected_years:
                     df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
                 if selected_qrtle:
@@ -664,7 +666,6 @@ if file1 is not None and file2 is not None:
                 def evaluar_alertas(row):
                     comentarios = []
                     color = ''
-                    
                     if len(row) > 37:
                         val_j = get_num(row.iloc[9])
                         val_z = get_date(row.iloc[25])
@@ -675,7 +676,6 @@ if file1 is not None and file2 is not None:
                         val_ai = get_num(row.iloc[34])
                         val_ak = get_num(row.iloc[36])
                         val_al_raw = str(row.iloc[37]).strip().lower()
-                        
                         al_vacio = val_al_raw in ['', 'nan', 'nat', 'none', 'null']
                         
                         flag_rojo = False
@@ -687,19 +687,15 @@ if file1 is not None and file2 is not None:
                             if (0.01 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
                                 flag_naranja = True
                                 comentarios.append("Revisar Adjustment vs Fecha reciente (<=6 meses)")
-                                
                         if val_af > 0 and val_ah in ["none selected", "nan", "", "none"]:
                             flag_amarillo = True
                             comentarios.append("Adjustment con 'None Selected'")
-                            
                         if (0 < val_ak < 6) or (val_ak > 15):
                             flag_amarillo = True
                             comentarios.append("Valor AK fuera de rango recomendado")
-                            
                         if val_ak > 0 and al_vacio:
                             flag_amarillo = True
                             comentarios.append("AK > 0 pero Columna AL está vacía")
-                            
                         if val_ai > val_j and val_ak > 0:
                             flag_rojo = True
                             comentarios.append("AI supera el valor de J y AK > 0")
@@ -724,7 +720,6 @@ if file1 is not None and file2 is not None:
                     elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
                         df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
-                    # MOTOR DE BÚSQUEDA ACOTADO
                     if search_emp.strip() and not df_detalle.empty:
                         term = search_emp.strip()
                         if term.isdigit() and 'Global ID' in df_detalle.columns:
@@ -734,7 +729,6 @@ if file1 is not None and file2 is not None:
                             name_cols = [c for c in df_detalle.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
                             if not name_cols:
                                 name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
-                            
                             if name_cols:
                                 mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in name_cols]).any(axis=1)
                                 df_detalle = df_detalle[mask_search]
@@ -743,7 +737,6 @@ if file1 is not None and file2 is not None:
 
                     if not df_detalle.empty:
                         st.write(f"Showing **{len(df_detalle)}** matching employees.")
-                        
                         columnas_todas = list(df_detalle.columns)
                         if 'ALERT_COMMENTS' in columnas_todas:
                             columnas_todas.insert(4, columnas_todas.pop(columnas_todas.index('ALERT_COMMENTS')))
@@ -767,19 +760,22 @@ if file1 is not None and file2 is not None:
                         st.info("No employees match your search term or filters.")
                 else:
                     st.info("No employees match the selected Movement Type or Years/Quartile filters.")
+                    
+                return cost_df, df_breakdown_org, df_breakdown_func, df_detalle
 
 
             # ==========================================
-            #           TAB 2: EQUITY PLANNING
+            #           FUNCIÓN: EQUITY PLANNING
             # ==========================================
-            with tab_equity:
+            def render_equity():
+                eq_summary_df, df_brk_org, df_brk_func, df_equity_filtered = None, None, None, None
                 st.subheader("📈 Equity Planning")
                 st.info("This section displays data exclusively for employees eligible for stock (Column BJ = 'Yes').")
                 
-                col_bj_idx = 61  # Stock Eligibility
-                col_bl_idx = 63  # Midpoint of stock Range
-                col_bn_idx = 65  # BN Column (Percentage)
-                col_bp_idx = 67  # BP Column (Comments)
+                col_bj_idx = 61  
+                col_bl_idx = 63  
+                col_bn_idx = 65  
+                col_bp_idx = 67  
                 
                 if len(df_filtered.columns) > max(col_bn_idx, col_bp_idx):
                     mask_stock = df_filtered.iloc[:, col_bj_idx].astype(str).str.strip().str.lower() == 'yes'
@@ -800,6 +796,13 @@ if file1 is not None and file2 is not None:
                         
                         st.markdown("### Equity Overview")
                         col_pie, col_summary = st.columns([1, 1.5])
+                        
+                        def make_autopct(values):
+                            def my_autopct(pct):
+                                total = sum(values)
+                                val = int(round(pct * total / 100.0))
+                                return f'{val}\n({pct:.1f}%)' if pct >= 5 else ''
+                            return my_autopct
                         
                         with col_pie:
                             pie_labels_raw = ["Unplanned equity", "Below Midpoint", "Midpoint", "Above midpoint"]
@@ -829,6 +832,12 @@ if file1 is not None and file2 is not None:
                             equity_budget = val_bl_full.sum()
                             total_proposed = df_equity_full['Proposed Recommendation Value'].sum()
                             variance = total_proposed - equity_budget
+                            
+                            eq_summary_df = pd.DataFrame({
+                                "Equity Budget (Total BL)": [f"${equity_budget:,.2f}"],
+                                "Proposed Recommendation Value": [f"${total_proposed:,.2f}"],
+                                "Variance vs BGT": [f"${variance:,.2f}"]
+                            })
                             
                             if variance <= 0:
                                 status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
@@ -895,59 +904,30 @@ if file1 is not None and file2 is not None:
                                 st.info("Function column not found.")
                                 
                         st.markdown("---")
-                            
                         st.markdown("### 👥 Eligible Employees List")
                         
                         col_eq_filt1, col_eq_filt2 = st.columns(2)
-                        
-                        opciones_conceptos = [
-                            "0%", 
-                            "Below 100%", 
-                            "On Midpoint 100%", 
-                            "Above Midpoint", 
-                            "Above Midpoint w/o Comments"
-                        ]
+                        opciones_conceptos = ["0%", "Below 100%", "On Midpoint 100%", "Above Midpoint", "Above Midpoint w/o Comments"]
                         
                         with col_eq_filt1:
-                            seleccion_conceptos = st.multiselect(
-                                "1. Select Categories to display:", 
-                                options=opciones_conceptos, 
-                                default=[]
-                            )
-                        
+                            seleccion_conceptos = st.multiselect("1. Select Categories to display:", options=opciones_conceptos, default=[])
                         with col_eq_filt2:
-                            search_eq = st.text_input(
-                                "2. Search Employee (Exact ID or Name):", 
-                                "", 
-                                placeholder="Type Name or Exact Global ID...", 
-                                key='search_equity'
-                            )
+                            search_eq = st.text_input("2. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='search_equity')
 
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
                             val_bp = str(row.iloc[col_bp_idx]).strip()
-                            
-                            if pd.isna(val_bn) or str(val_bn).strip() == '' or str(val_bn).lower() == 'nan':
-                                return "0%"
-                            
-                            try:
-                                bn_num = float(val_bn)
-                            except ValueError:
-                                return "0%"
+                            if pd.isna(val_bn) or str(val_bn).strip() == '' or str(val_bn).lower() == 'nan': return "0%"
+                            try: bn_num = float(val_bn)
+                            except ValueError: return "0%"
                                 
                             bp_vacio = (val_bp == '' or val_bp.lower() in ['nan', 'none', 'null'])
-                            
-                            if bn_num == 0:
-                                return "0%"
-                            elif bn_num < 100:
-                                return "Below 100%"
-                            elif bn_num == 100:
-                                return "On Midpoint 100%"
+                            if bn_num == 0: return "0%"
+                            elif bn_num < 100: return "Below 100%"
+                            elif bn_num == 100: return "On Midpoint 100%"
                             elif bn_num > 100:
-                                if bp_vacio:
-                                    return "Above Midpoint w/o Comments" 
-                                else:
-                                    return "Above Midpoint" 
+                                if bp_vacio: return "Above Midpoint w/o Comments" 
+                                else: return "Above Midpoint" 
                             return "0%"
 
                         df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
@@ -957,7 +937,6 @@ if file1 is not None and file2 is not None:
                         else:
                             df_equity_filtered = df_equity_full.iloc[0:0] 
                             
-                        # MOTOR DE BÚSQUEDA ACOTADO EN EQUITY
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
                             if term_eq.isdigit() and 'Global ID' in df_equity_filtered.columns:
@@ -965,8 +944,7 @@ if file1 is not None and file2 is not None:
                                 df_equity_filtered = df_equity_filtered[mask_exact_eq]
                             else:
                                 name_cols_eq = [c for c in df_equity_filtered.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
-                                if not name_cols_eq:
-                                    name_cols_eq = [c for c in df_equity_filtered.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                                if not name_cols_eq: name_cols_eq = [c for c in df_equity_filtered.columns if 'name' in c.lower() and 'manager' not in c.lower()]
                                 
                                 if name_cols_eq:
                                     mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in name_cols_eq]).any(axis=1)
@@ -976,7 +954,6 @@ if file1 is not None and file2 is not None:
                             
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your criteria.")
-                            
                             cols_eq = list(df_equity_filtered.columns)
                             if 'ALERT_CATEGORY' in cols_eq:
                                 cols_eq.insert(4, cols_eq.pop(cols_eq.index('ALERT_CATEGORY')))
@@ -984,7 +961,6 @@ if file1 is not None and file2 is not None:
 
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             
-                            # Limpiar temporales
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
@@ -994,28 +970,77 @@ if file1 is not None and file2 is not None:
                             def color_equity_totales(df_vista):
                                 estilos = []
                                 for cat in categorias_array:
-                                    if cat == "Above Midpoint w/o Comments":
-                                        estilos.append('background-color: #ffcccc')
-                                    elif cat == "Above Midpoint":
-                                        estilos.append('background-color: #ffffcc')
-                                    else:
-                                        estilos.append('')
-                                        
+                                    if cat == "Above Midpoint w/o Comments": estilos.append('background-color: #ffcccc')
+                                    elif cat == "Above Midpoint": estilos.append('background-color: #ffffcc')
+                                    else: estilos.append('')
                                 style_dict = {col: estilos for col in df_vista.columns}
                                 return pd.DataFrame(style_dict, index=df_vista.index)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
                             st.dataframe(df_eq_styled, use_container_width=True)
                         else:
-                            if seleccion_conceptos:
-                                st.info("No employees match your search term in the selected categories.")
-                            else:
-                                st.info("Select one or more categories above to view employee details in this table.")
-
+                            if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
+                            else: st.info("Select one or more categories above to view employee details in this table.")
                     else:
                         st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
                 else:
                     st.error("The uploaded file does not contain enough columns to process Equity Planning metrics (requires up to Column BP).")
+                    
+                return eq_summary_df, df_brk_org, df_brk_func, df_equity_filtered
+
+            # ==========================================
+            #   LÓGICA PRINCIPAL DE RENDERIZADO (PDF VS TABS)
+            # ==========================================
+            if pdf_mode:
+                sal_data = render_salary()
+                st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
+                eq_data = render_equity()
+            else:
+                with tab_salary:
+                    sal_data = render_salary()
+                with tab_equity:
+                    eq_data = render_equity()
+
+            # ==========================================
+            #   MOTOR DE EXPORTACIÓN A EXCEL EN SIDEBAR
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("📥 Download Data (Excel)")
+            st.sidebar.info("Download a complete Excel report with all summaries, breakdowns, and employee details matching your active filters.")
+            
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # Extraemos la información de Salarios
+                if sal_data:
+                    cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
+                    if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
+                    if df_breakdown_org is not None: df_breakdown_org.to_excel(writer, sheet_name='Salary by Org', index=False)
+                    if df_breakdown_func is not None: df_breakdown_func.to_excel(writer, sheet_name='Salary by Func', index=False)
+                    if df_detalle is not None and not df_detalle.empty: 
+                        df_det_excel = df_detalle.copy()
+                        cols_d = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
+                        df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
+                        df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
+                
+                # Extraemos la información de Equity
+                if eq_data:
+                    eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
+                    if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
+                    if eq_brk_org is not None: eq_brk_org.to_excel(writer, sheet_name='Equity by Org', index=False)
+                    if eq_brk_func is not None: eq_brk_func.to_excel(writer, sheet_name='Equity by Func', index=False)
+                    if df_eq_filtered is not None and not df_eq_filtered.empty:
+                        df_eq_excel = df_eq_filtered.copy()
+                        cols_e = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
+                        df_eq_excel = df_eq_excel.drop(columns=[c for c in cols_e if c in df_eq_excel.columns])
+                        df_eq_excel.to_excel(writer, sheet_name='Equity Details', index=False)
+                        
+            output.seek(0)
+            st.sidebar.download_button(
+                label="📊 Download Full Excel Report",
+                data=output,
+                file_name="Dashboard_Final_Report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: {e}")
