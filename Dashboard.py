@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -185,7 +186,6 @@ if file1 is not None and file2 is not None:
             elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
                 col_curr_qrtle = c
                     
-        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
         if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
@@ -233,9 +233,18 @@ if file1 is not None and file2 is not None:
             pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
             if pdf_mode:
-                st.sidebar.markdown(
-                    '<button onclick="window.print()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save Dashboard as PDF</button>',
-                    unsafe_allow_html=True
+                components.html(
+                    """
+                    <script>
+                    function printDashboard() {
+                        window.parent.print();
+                    }
+                    </script>
+                    <button onclick="printDashboard()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: sans-serif;">
+                        Save Dashboard as PDF
+                    </button>
+                    """,
+                    height=50
                 )
                 st.sidebar.info("Tip: In the print dialog, select 'Save as PDF', enable 'Background Graphics', and hide Headers/Footers.")
 
@@ -549,7 +558,6 @@ if file1 is not None and file2 is not None:
                         ax6.text(0.5, 0.5, "No Gender data", ha='center', va='center')
                     st.pyplot(fig6)
 
-                # --- NUEVA GRÁFICA SOLICITADA: YEARS IN SG VS NEW QRTLE ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
                 
@@ -991,7 +999,7 @@ if file1 is not None and file2 is not None:
                 return eq_summary_df, df_brk_org, df_brk_func, df_equity_filtered
 
             # ==========================================
-            #   LÓGICA PRINCIPAL DE RENDERIZADO (PDF VS TABS)
+            #   LÓGICA PRINCIPAL DE RENDERIZADO
             # ==========================================
             if pdf_mode:
                 sal_data = render_salary()
@@ -1012,8 +1020,18 @@ if file1 is not None and file2 is not None:
             st.sidebar.info("Download a complete Excel report with all summaries, breakdowns, and employee details matching your active filters.")
             
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Extraemos la información de Salarios
+            
+            # Intentamos usar xlsxwriter (ideal), si no existe, openpyxl, y si no, por defecto.
+            try:
+                writer = pd.ExcelWriter(output, engine='xlsxwriter')
+            except ImportError:
+                try:
+                    writer = pd.ExcelWriter(output, engine='openpyxl')
+                except ImportError:
+                    writer = pd.ExcelWriter(output)
+                    
+            with writer:
+                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1025,7 +1043,7 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
-                # Extraemos la información de Equity
+                # Escribimos hojas de Equity
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
@@ -1037,10 +1055,12 @@ if file1 is not None and file2 is not None:
                         df_eq_excel = df_eq_excel.drop(columns=[c for c in cols_e if c in df_eq_excel.columns])
                         df_eq_excel.to_excel(writer, sheet_name='Equity Details', index=False)
                         
-            output.seek(0)
+            # ¡CRUCIAL!: Extraer el valor DESPUÉS de que se haya cerrado el bloque 'with writer:'
+            excel_data = output.getvalue()
+            
             st.sidebar.download_button(
                 label="📊 Download Full Excel Report",
-                data=output,
+                data=excel_data,
                 file_name="Dashboard_Final_Report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
