@@ -436,6 +436,7 @@ if file1 is not None and file2 is not None:
                         
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
+                            
                             wedges3, texts3, autotexts3 = ax3.pie(
                                 reason_counts.values, startangle=90, colors=colores_motivos,
                                 autopct=make_autopct(reason_counts.values), pctdistance=0.65,
@@ -462,6 +463,7 @@ if file1 is not None and file2 is not None:
                         
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
+                            
                             wedges4, texts4, autotexts4 = ax4.pie(
                                 pot_counts.values, startangle=90, colors=colores_pot,
                                 autopct=make_autopct(pot_counts.values), pctdistance=0.65,
@@ -996,6 +998,7 @@ if file1 is not None and file2 is not None:
                 st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
                 eq_data = render_equity()
             else:
+                tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
                 with tab_salary:
                     sal_data = render_salary()
                 with tab_equity:
