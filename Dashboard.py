@@ -186,6 +186,7 @@ if file1 is not None and file2 is not None:
             elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
                 col_curr_qrtle = c
                     
+        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
         if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
@@ -233,6 +234,26 @@ if file1 is not None and file2 is not None:
             pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
             if pdf_mode:
+                # CSS MÁGICO PARA IMPRESIÓN PERFECTA (Oculta sidebar, ajusta a landscape)
+                st.markdown("""
+                <style>
+                @media print {
+                    [data-testid="stSidebar"] { display: none !important; }
+                    header { display: none !important; }
+                    footer { display: none !important; }
+                    .main .block-container {
+                        max-width: 100% !important;
+                        width: 100% !important;
+                        padding: 1cm !important;
+                    }
+                    @page {
+                        size: landscape;
+                        margin: 1cm;
+                    }
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 components.html(
                     """
                     <script>
@@ -241,7 +262,7 @@ if file1 is not None and file2 is not None:
                     }
                     </script>
                     <button onclick="printDashboard()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: sans-serif;">
-                        Save Dashboard as PDF
+                        🖨️ Save Dashboard as PDF
                     </button>
                     """,
                     height=50
@@ -284,14 +305,35 @@ if file1 is not None and file2 is not None:
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
 
+                # Guardamos en DataFrame solo para exportarlo a Excel limpio
                 cost_df = pd.DataFrame({
                     "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
                     "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
-                st.table(cost_df)
-                st.markdown(f"<div style='margin-bottom: 20px; font-size: 18px;'><strong>Variance vs BGT:</strong> {status_html}</div>", unsafe_allow_html=True)
+                # TABLA HTML RESPONSIVA (Evita recortes al imprimir)
+                summary_html = f"""
+                <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
+                  <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Adj Cost</th>
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Promo Cost</th>
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Total Cost</th>
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Budget Target ({budget_pct}%)</th>
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Variance vs BGT</th>
+                    <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">% Incr</th>
+                  </tr>
+                  <tr style="background-color: white;">
+                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${cost_adj:,.2f}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${cost_promo:,.2f}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight:bold;">${total_cost:,.2f}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${budget_amount:,.2f}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight:bold;">{pct_incremento:,.2f}%</td>
+                  </tr>
+                </table>
+                """
+                st.markdown(summary_html, unsafe_allow_html=True)
                 
                 # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
@@ -313,28 +355,28 @@ if file1 is not None and file2 is not None:
                     
                     grp = df_temp.groupby('Group').sum().reset_index()
                     grp['Total Cost'] = grp['Adj_Cost'] + grp['Promo_Cost']
-                    grp['Budget Amount'] = grp['Total_Salary'] * (b_pct / 100)
-                    grp['Variance vs BGT'] = grp['Total Cost'] - grp['Budget Amount']
-                    grp['Status'] = np.where(grp['Variance vs BGT'] > 0, 'Over Budget', 'On/Under Budget')
-                    grp['Total % Increment'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
+                    grp['Budget'] = grp['Total_Salary'] * (b_pct / 100)
+                    grp['Variance'] = grp['Total Cost'] - grp['Budget']
+                    grp['Status'] = np.where(grp['Variance'] > 0, 'Over Budget', 'On/Under Budget')
+                    grp['% Incr'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
                     
-                    grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget Amount', 'Variance vs BGT', 'Status', 'Total % Increment']]
-                    grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adjustment Cost', 'Promo_Cost': 'Growth Promo Cost'}, inplace=True)
+                    grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget', 'Variance', 'Status', '% Incr']]
+                    grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adj Cost', 'Promo_Cost': 'Promo Cost'}, inplace=True)
                     return grp
                 
                 def color_salary_variance(row):
-                    if row['Variance vs BGT'] > 0:
-                        return ['color: red; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                    if row['Variance'] > 0:
+                        return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
                     else:
-                        return ['color: green; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                        return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
 
                 format_dict = {
-                    'Adjustment Cost': '${:,.2f}',
-                    'Growth Promo Cost': '${:,.2f}',
+                    'Adj Cost': '${:,.2f}',
+                    'Promo Cost': '${:,.2f}',
                     'Total Cost': '${:,.2f}',
-                    'Budget Amount': '${:,.2f}',
-                    'Variance vs BGT': '${:,.2f}',
-                    'Total % Increment': '{:.2f}%'
+                    'Budget': '${:,.2f}',
+                    'Variance': '${:,.2f}',
+                    '% Incr': '{:.2f}%'
                 }
                 
                 with tab_org:
@@ -878,25 +920,25 @@ if file1 is not None and file2 is not None:
                         def build_equity_breakdown(df_base, col_name):
                             df_temp = pd.DataFrame({
                                 'Group': df_base[col_name].fillna('Unknown'),
-                                'Equity Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
-                                'Proposed Value': df_base['Proposed Recommendation Value']
+                                'Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
+                                'Proposed': df_base['Proposed Recommendation Value']
                             })
                             grp = df_temp.groupby('Group').sum().reset_index()
-                            grp['Variance vs BGT'] = grp['Proposed Value'] - grp['Equity Budget']
-                            grp['Status'] = np.where(grp['Variance vs BGT'] > 0, 'Over Budget', 'On/Under Budget')
+                            grp['Variance'] = grp['Proposed'] - grp['Budget']
+                            grp['Status'] = np.where(grp['Variance'] > 0, 'Over Budget', 'On/Under Budget')
                             grp.rename(columns={'Group': col_name}, inplace=True)
                             return grp
 
                         def color_variance_row(row):
-                            if row['Variance vs BGT'] > 0:
-                                return ['color: red; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                            if row['Variance'] > 0:
+                                return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
                             else:
-                                return ['color: green; font-weight: bold' if col in ['Variance vs BGT', 'Status'] else '' for col in row.index]
+                                return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
                                 
                         format_dict_eq = {
-                            'Equity Budget': '${:,.2f}',
-                            'Proposed Value': '${:,.2f}',
-                            'Variance vs BGT': '${:,.2f}'
+                            'Budget': '${:,.2f}',
+                            'Proposed': '${:,.2f}',
+                            'Variance': '${:,.2f}'
                         }
 
                         with tab_eq_org:
@@ -1021,7 +1063,6 @@ if file1 is not None and file2 is not None:
             
             output = io.BytesIO()
             
-            # Intentamos usar xlsxwriter (ideal), si no existe, openpyxl, y si no, por defecto.
             try:
                 writer = pd.ExcelWriter(output, engine='xlsxwriter')
             except ImportError:
@@ -1031,7 +1072,6 @@ if file1 is not None and file2 is not None:
                     writer = pd.ExcelWriter(output)
                     
             with writer:
-                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1043,7 +1083,6 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
-                # Escribimos hojas de Equity
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
@@ -1055,7 +1094,6 @@ if file1 is not None and file2 is not None:
                         df_eq_excel = df_eq_excel.drop(columns=[c for c in cols_e if c in df_eq_excel.columns])
                         df_eq_excel.to_excel(writer, sheet_name='Equity Details', index=False)
                         
-            # ¡CRUCIAL!: Extraer el valor DESPUÉS de que se haya cerrado el bloque 'with writer:'
             excel_data = output.getvalue()
             
             st.sidebar.download_button(
