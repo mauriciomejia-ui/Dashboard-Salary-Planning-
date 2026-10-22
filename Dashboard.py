@@ -186,6 +186,7 @@ if file1 is not None and file2 is not None:
             elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
                 col_curr_qrtle = c
                     
+        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
         if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
@@ -303,14 +304,12 @@ if file1 is not None and file2 is not None:
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
 
-                # Guardamos en DataFrame solo para exportarlo a Excel limpio
                 cost_df = pd.DataFrame({
                     "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
                     "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
-                # TABLA HTML RESPONSIVA (Evita recortes al imprimir)
                 summary_html = f"""
                 <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
                   <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
@@ -824,6 +823,7 @@ if file1 is not None and file2 is not None:
                 col_bonus_target = None
                 col_bonus_proposed = None
                 col_bonus_pct = None
+                col_impact = None
                 
                 for c in df_filtered.columns:
                     c_lower = str(c).lower().strip()
@@ -834,6 +834,9 @@ if file1 is not None and file2 is not None:
                             col_bonus_proposed = c
                         elif '%' in c_lower or 'percent' in c_lower:
                             if not col_bonus_pct: col_bonus_pct = c
+                    # Detectar columna de impacto o desempeño
+                    if 'impact' in c_lower or 'performance' in c_lower or 'rating' in c_lower:
+                        if not col_impact: col_impact = c
                             
                 # Fallbacks heurísticos
                 if not col_bonus_target:
@@ -842,12 +845,12 @@ if file1 is not None and file2 is not None:
                 if not col_bonus_proposed:
                     proposed = [c for c in df_filtered.columns if 'bonus' in str(c).lower() and ('amount' in str(c).lower() or 'actual' in str(c).lower())]
                     if proposed: col_bonus_proposed = proposed[0]
+                if not col_impact:
+                    col_impact = 'Potential' # Si no encuentra columna de desempeño, usa el potencial
                     
                 if not col_bonus_target or not col_bonus_proposed:
                     st.error("Could not auto-detect Bonus columns (Target Amount and Proposed Amount). Ensure columns contain words like 'Bonus Target Amount' and 'Proposed Bonus'.")
                     return None, None, None, None
-                
-                st.info(f"Using columns: Budget -> **{col_bonus_target}** | Proposed -> **{col_bonus_proposed}**")
                 
                 df_filtered['BONUS_TGT_NUM'] = pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(0)
                 df_bonus_full = df_filtered[df_filtered['BONUS_TGT_NUM'] > 0].copy()
@@ -861,79 +864,90 @@ if file1 is not None and file2 is not None:
                     else:
                         df_bonus_full['Bonus %'] = np.where(df_bonus_full['BONUS_TGT_NUM'] > 0, (df_bonus_full['Proposed Bonus Value'] / df_bonus_full['BONUS_TGT_NUM']) * 100, 0)
 
-                    c_0 = (df_bonus_full['Bonus %'] == 0).sum()
-                    c_below = ((df_bonus_full['Bonus %'] > 0) & (df_bonus_full['Bonus %'] < 100)).sum()
-                    c_target = (df_bonus_full['Bonus %'] == 100).sum()
-                    c_above = (df_bonus_full['Bonus %'] > 100).sum()
+                    # --- TABLA Y GRÁFICA ESTILO BONUS IO PLANNING ---
+                    st.markdown("### Bonus IO Planning Summary")
                     
-                    st.markdown("### Bonus Overview")
-                    col_pie, col_summary = st.columns([1, 1.5])
+                    grp_bonus = df_bonus_full.groupby(col_impact).agg(
+                        Num_EEs=('Global ID', 'count'),
+                        Avg_IO=('Bonus %', 'mean')
+                    ).reset_index()
                     
-                    def make_autopct(values):
-                        def my_autopct(pct):
-                            total = sum(values)
-                            val = int(round(pct * total / 100.0))
-                            return f'{val}\n({pct:.1f}%)' if pct >= 5 else ''
-                        return my_autopct
+                    total_ees = grp_bonus['Num_EEs'].sum()
+                    grp_bonus['Pct_EEs'] = (grp_bonus['Num_EEs'] / total_ees) * 100 if total_ees > 0 else 0
                     
-                    with col_pie:
-                        pie_labels_raw = ["0% / No Bonus", "Below Target", "On Target 100%", "Above Target"]
-                        pie_sizes_raw = [c_0, c_below, c_target, c_above]
-                        pie_colors_raw = ['#d3d3d3', '#ffb347', '#87cefa', '#ff9999'] 
+                    # Mapeo de promedios de referencia basado en el diseño
+                    def get_reference(category):
+                        cat_lower = str(category).lower()
+                        if 'extraordinary' in cat_lower: return '~ 175%'
+                        if 'positive' in cat_lower: return '~ 108%'
+                        if 'increase' in cat_lower: return '~ 80%'
+                        return '-'
                         
-                        pie_labels = [l for l, s in zip(pie_labels_raw, pie_sizes_raw) if s > 0]
-                        pie_sizes = [s for s in pie_sizes_raw if s > 0]
-                        pie_colors = [c for c, s in zip(pie_colors_raw, pie_sizes_raw) if s > 0]
-                        
-                        fig_bon, ax_bon = plt.subplots(figsize=(5, 4))
-                        if sum(pie_sizes) > 0:
-                            wedges_bon, texts_bon, autotexts_bon = ax_bon.pie(
-                                pie_sizes, startangle=90, colors=pie_colors,
-                                autopct=make_autopct(pie_sizes), pctdistance=0.65,
-                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
-                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
-                            )
-                            leyenda_bon = [f"{l} - {s}" for l, s in zip(pie_labels, pie_sizes)]
-                            ax_bon.legend(wedges_bon, leyenda_bon, title="Distribution", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                            ax_bon.axis('equal')
-                        else:
-                            ax_bon.text(0.5, 0.5, "No data available", ha='center', va='center')
-                        st.pyplot(fig_bon)
+                    grp_bonus['Reference'] = grp_bonus[col_impact].apply(get_reference)
                     
-                    with col_summary:
-                        bonus_budget = df_bonus_full['BONUS_TGT_NUM'].sum()
-                        total_proposed = df_bonus_full['Proposed Bonus Value'].sum()
-                        variance = total_proposed - bonus_budget
+                    # Generación de la tabla HTML idéntica a la referencia
+                    html_table = '''
+                    <table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; margin-bottom: 30px;">
+                      <tr style="background-color: #0b2240; color: white;">
+                        <th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th>
+                        <th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th>
+                        <th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th>
+                        <th style="padding: 12px; border: 1px solid #ccc;">IO % Range</th>
+                        <th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th>
+                      </tr>'''
+                      
+                    for _, row in grp_bonus.iterrows():
+                        cat = row[col_impact]
+                        n_ee = row['Num_EEs']
+                        pct_ee = row['Pct_EEs']
+                        io_range = row['Avg_IO']
+                        ref = row['Reference']
+                        html_table += f'''
+                        <tr>
+                          <td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left;">{cat}</td>
+                          <td style="padding: 10px; border: 1px solid #e0e0e0;">{n_ee}</td>
+                          <td style="padding: 10px; border: 1px solid #e0e0e0;">{pct_ee:.0f}%</td>
+                          <td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{io_range:.0f}%</td>
+                          <td style="padding: 10px; border: 1px solid #e0e0e0;">{ref}</td>
+                        </tr>
+                        '''
                         
-                        bon_summary_df = pd.DataFrame({
-                            "Bonus Budget (Total Target)": [f"${bonus_budget:,.2f}"],
-                            "Proposed Bonus Amount": [f"${total_proposed:,.2f}"],
-                            "Variance vs BGT": [f"${variance:,.2f}"]
-                        })
-                        
-                        if variance <= 0:
-                            status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
-                        else:
-                            status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
-                            
-                        st.markdown("##### Total Bonus Budget Summary")
-                        summary_html = f"""
-                        <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
-                          <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Bonus Target Budget</th>
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Bonus Value</th>
-                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Status (Variance)</th>
-                          </tr>
-                          <tr style="background-color: white;">
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${bonus_budget:,.2f}</td>
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
-                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
-                          </tr>
-                        </table>
-                        """
-                        st.markdown(summary_html, unsafe_allow_html=True)
-                        
-                    # --- DESGLOSE DE BONUS (BREAKDOWN) ---
+                    html_table += f'''
+                        <tr>
+                          <td style="padding: 10px; border: 0px; text-align:left;"></td>
+                          <td style="padding: 10px; border-top: 2px solid #0b2240; color: #3b5bdb; font-weight: bold; border-bottom: 1px solid #e0e0e0;">{total_ees}</td>
+                          <td style="padding: 10px; border-top: 2px solid #0b2240; color: #3b5bdb; font-weight: bold; border-bottom: 1px solid #e0e0e0;">100%</td>
+                          <td style="padding: 10px; border: 0px;"></td>
+                          <td style="padding: 10px; border: 0px;"></td>
+                        </tr>
+                    </table>'''
+                    
+                    st.markdown(html_table, unsafe_allow_html=True)
+                    
+                    # Gráfica de Barras limpia tipo IO Range
+                    fig_b, ax_b = plt.subplots(figsize=(8, 5))
+                    bars_b = ax_b.bar(grp_bonus[col_impact].astype(str), grp_bonus['Avg_IO'], width=0.5, color='#5a84f1')
+                    
+                    max_io = max(200, grp_bonus['Avg_IO'].max() * 1.2) if not grp_bonus.empty else 200
+                    ax_b.set_ylim(0, max_io)
+                    ax_b.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
+                    
+                    for bar in bars_b:
+                        yval = bar.get_height()
+                        ax_b.text(bar.get_x() + bar.get_width()/2, yval - (max_io * 0.05), f'{int(yval)}%', 
+                                  ha='center', va='top', color='white', fontweight='bold', fontsize=11)
+                    
+                    ax_b.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
+                    ax_b.set_axisbelow(True)
+                    ax_b.spines['top'].set_visible(False)
+                    ax_b.spines['right'].set_visible(False)
+                    ax_b.spines['left'].set_visible(False)
+                    
+                    st.pyplot(fig_b)
+                    
+                    st.markdown("<hr>", unsafe_allow_html=True)
+                    
+                    # --- RESUMEN MONETARIO ---
                     st.markdown("### 🏢 Bonus Breakdown (By Org & Function)")
                     tab_bon_org, tab_bon_func = st.tabs(["By Reporting Organization", "By Function"])
                     
@@ -1048,7 +1062,8 @@ if file1 is not None and file2 is not None:
                 else:
                     st.warning("No employees found with a Bonus Target > 0 based on current filters.")
                     
-                return bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered
+                # Devolvemos un dataframe dummy para no romper la compatibilidad de excel si no existiera bon_summary_df completo original
+                return pd.DataFrame(), df_brk_org, df_brk_func, df_bonus_filtered
 
             # ==========================================
             #           FUNCIÓN: EQUITY PLANNING
@@ -1325,7 +1340,7 @@ if file1 is not None and file2 is not None:
                 # Escribimos hojas de Bonus
                 if 'bon_data' in locals() and bon_data:
                     bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
-                    if bon_summary_df is not None: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
+                    if bon_summary_df is not None and not bon_summary_df.empty: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
                     if bon_brk_org is not None: bon_brk_org.to_excel(writer, sheet_name='Bonus by Org', index=False)
                     if bon_brk_func is not None: bon_brk_func.to_excel(writer, sheet_name='Bonus by Func', index=False)
                     if df_bon_filtered is not None and not df_bon_filtered.empty:
