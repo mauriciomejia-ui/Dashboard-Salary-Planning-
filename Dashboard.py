@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+import matplotlib.subplots as subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
@@ -186,7 +187,6 @@ if file1 is not None and file2 is not None:
             elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
                 col_curr_qrtle = c
                     
-        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
         if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
@@ -234,7 +234,6 @@ if file1 is not None and file2 is not None:
             pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
             if pdf_mode:
-                # CSS MÁGICO PARA IMPRESIÓN PERFECTA (Oculta sidebar, ajusta a landscape)
                 st.markdown("""
                 <style>
                 @media print {
@@ -305,14 +304,12 @@ if file1 is not None and file2 is not None:
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
 
-                # Guardamos en DataFrame solo para exportarlo a Excel limpio
                 cost_df = pd.DataFrame({
                     "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
                     "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
-                # TABLA HTML RESPONSIVA (Evita recortes al imprimir)
                 summary_html = f"""
                 <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
                   <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
@@ -815,6 +812,246 @@ if file1 is not None and file2 is not None:
                     
                 return cost_df, df_breakdown_org, df_breakdown_func, df_detalle
 
+            # ==========================================
+            #           FUNCIÓN: BONUS PLANNING
+            # ==========================================
+            def render_bonus():
+                bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered = None, None, None, None
+                st.subheader("🎯 Bonus Planning")
+                
+                # Buscar columnas de Bonus dinámicamente
+                col_bonus_target = None
+                col_bonus_proposed = None
+                col_bonus_pct = None
+                
+                for c in df_filtered.columns:
+                    c_lower = str(c).lower().strip()
+                    if 'bonus' in c_lower:
+                        if ('target' in c_lower or 'budget' in c_lower) and ('amount' in c_lower or '$' in c_lower or 'value' in c_lower) and not col_bonus_target:
+                            col_bonus_target = c
+                        elif ('proposed' in c_lower or 'actual' in c_lower or 'total' in c_lower or 'recommend' in c_lower) and ('amount' in c_lower or '$' in c_lower or 'value' in c_lower) and not col_bonus_proposed:
+                            col_bonus_proposed = c
+                        elif '%' in c_lower or 'percent' in c_lower:
+                            if not col_bonus_pct: col_bonus_pct = c
+                            
+                # Fallbacks heurísticos si no se encuentran por nombre exacto
+                if not col_bonus_target:
+                    targets = [c for c in df_filtered.columns if 'bonus target' in str(c).lower()]
+                    if targets: col_bonus_target = targets[0]
+                if not col_bonus_proposed:
+                    proposed = [c for c in df_filtered.columns if 'bonus' in str(c).lower() and ('amount' in str(c).lower() or 'actual' in str(c).lower())]
+                    if proposed: col_bonus_proposed = proposed[0]
+                    
+                if not col_bonus_target or not col_bonus_proposed:
+                    st.error("Could not auto-detect Bonus columns (Target Amount and Proposed Amount). Ensure columns contain words like 'Bonus Target Amount' and 'Proposed Bonus'.")
+                    return None, None, None, None
+                
+                st.info(f"Using columns: Budget -> **{col_bonus_target}** | Proposed -> **{col_bonus_proposed}**")
+                
+                # Filtrar solo elegibles (Target > 0)
+                df_filtered['BONUS_TGT_NUM'] = pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(0)
+                df_bonus_full = df_filtered[df_filtered['BONUS_TGT_NUM'] > 0].copy()
+                
+                if not df_bonus_full.empty:
+                    df_bonus_full = df_bonus_full.rename(columns={'Chief Name': 'Manager'})
+                    
+                    df_bonus_full['Proposed Bonus Value'] = pd.to_numeric(df_bonus_full[col_bonus_proposed], errors='coerce').fillna(0)
+                    
+                    # Calcular porcentaje de bono si no existe
+                    if col_bonus_pct:
+                        df_bonus_full['Bonus %'] = pd.to_numeric(df_bonus_full[col_bonus_pct], errors='coerce').fillna(0)
+                    else:
+                        df_bonus_full['Bonus %'] = (df_bonus_full['Proposed Bonus Value'] / df_bonus_full['BONUS_TGT_NUM']) * 100
+
+                    # Lógica para pastel
+                    c_0 = (df_bonus_full['Bonus %'] == 0).sum()
+                    c_below = ((df_bonus_full['Bonus %'] > 0) & (df_bonus_full['Bonus %'] < 100)).sum()
+                    c_target = (df_bonus_full['Bonus %'] == 100).sum()
+                    c_above = (df_bonus_full['Bonus %'] > 100).sum()
+                    
+                    st.markdown("### Bonus Overview")
+                    col_pie, col_summary = st.columns([1, 1.5])
+                    
+                    def make_autopct(values):
+                        def my_autopct(pct):
+                            total = sum(values)
+                            val = int(round(pct * total / 100.0))
+                            return f'{val}\n({pct:.1f}%)' if pct >= 5 else ''
+                        return my_autopct
+                    
+                    with col_pie:
+                        pie_labels_raw = ["0% / No Bonus", "Below Target", "On Target 100%", "Above Target"]
+                        pie_sizes_raw = [c_0, c_below, c_target, c_above]
+                        pie_colors_raw = ['#d3d3d3', '#ffb347', '#87cefa', '#ff9999'] 
+                        
+                        pie_labels = [l for l, s in zip(pie_labels_raw, pie_sizes_raw) if s > 0]
+                        pie_sizes = [s for s in pie_sizes_raw if s > 0]
+                        pie_colors = [c for c, s in zip(pie_colors_raw, pie_sizes_raw) if s > 0]
+                        
+                        fig_bon, ax_bon = plt.subplots(figsize=(5, 4))
+                        if sum(pie_sizes) > 0:
+                            wedges_bon, texts_bon, autotexts_bon = ax_bon.pie(
+                                pie_sizes, startangle=90, colors=pie_colors,
+                                autopct=make_autopct(pie_sizes), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
+                            leyenda_bon = [f"{l} - {s}" for l, s in zip(pie_labels, pie_sizes)]
+                            ax_bon.legend(wedges_bon, leyenda_bon, title="Distribution", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                            ax_bon.axis('equal')
+                        else:
+                            ax_bon.text(0.5, 0.5, "No data available", ha='center', va='center')
+                        st.pyplot(fig_bon)
+                    
+                    with col_summary:
+                        bonus_budget = df_bonus_full['BONUS_TGT_NUM'].sum()
+                        total_proposed = df_bonus_full['Proposed Bonus Value'].sum()
+                        variance = total_proposed - bonus_budget
+                        
+                        bon_summary_df = pd.DataFrame({
+                            "Bonus Budget (Total Target)": [f"${bonus_budget:,.2f}"],
+                            "Proposed Bonus Amount": [f"${total_proposed:,.2f}"],
+                            "Variance vs BGT": [f"${variance:,.2f}"]
+                        })
+                        
+                        if variance <= 0:
+                            status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
+                        else:
+                            status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
+                            
+                        st.markdown("##### Total Bonus Budget Summary")
+                        summary_html = f"""
+                        <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
+                          <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Bonus Target Budget</th>
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Bonus Value</th>
+                            <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Status (Variance)</th>
+                          </tr>
+                          <tr style="background-color: white;">
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${bonus_budget:,.2f}</td>
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
+                            <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
+                          </tr>
+                        </table>
+                        """
+                        st.markdown(summary_html, unsafe_allow_html=True)
+                        
+                    # --- DESGLOSE DE BONUS (BREAKDOWN) ---
+                    st.markdown("### 🏢 Bonus Breakdown (By Org & Function)")
+                    tab_bon_org, tab_bon_func = st.tabs(["By Reporting Organization", "By Function"])
+                    
+                    def build_bonus_breakdown(df_base, col_name):
+                        df_temp = pd.DataFrame({
+                            'Group': df_base[col_name].fillna('Unknown'),
+                            'Budget': df_base['BONUS_TGT_NUM'],
+                            'Proposed': df_base['Proposed Bonus Value']
+                        })
+                        grp = df_temp.groupby('Group').sum().reset_index()
+                        grp['Variance'] = grp['Proposed'] - grp['Budget']
+                        grp['Status'] = np.where(grp['Variance'] > 0, 'Over Budget', 'On/Under Budget')
+                        grp.rename(columns={'Group': col_name}, inplace=True)
+                        return grp
+
+                    def color_variance_row(row):
+                        if row['Variance'] > 0:
+                            return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                        else:
+                            return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                            
+                    format_dict_bon = {
+                        'Budget': '${:,.2f}',
+                        'Proposed': '${:,.2f}',
+                        'Variance': '${:,.2f}'
+                    }
+
+                    with tab_bon_org:
+                        if 'Reporting Organization' in df_filtered.columns:
+                            df_brk_org = build_bonus_breakdown(df_bonus_full, 'Reporting Organization')
+                            st.dataframe(df_brk_org.style.format(format_dict_bon).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Reporting Organization column not found.")
+                            
+                    with tab_bon_func:
+                        if 'Function' in df_filtered.columns:
+                            df_brk_func = build_bonus_breakdown(df_bonus_full, 'Function')
+                            st.dataframe(df_brk_func.style.format(format_dict_bon).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Function column not found.")
+                            
+                    st.markdown("---")
+                    st.markdown("### 👥 Bonus Eligible Employees List")
+                    
+                    col_b_filt1, col_b_filt2 = st.columns(2)
+                    opciones_conceptos = ["0% / No Bonus", "Below Target", "On Target 100%", "Above Target"]
+                    
+                    with col_b_filt1:
+                        seleccion_conceptos = st.multiselect("1. Select Categories to display:", options=opciones_conceptos, default=[])
+                    with col_b_filt2:
+                        search_bon = st.text_input("2. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='search_bonus')
+
+                    def clasificar_bonus(row):
+                        pct = row['Bonus %']
+                        if pct == 0: return "0% / No Bonus"
+                        elif pct < 100: return "Below Target"
+                        elif pct == 100: return "On Target 100%"
+                        elif pct > 100: return "Above Target"
+                        return "0% / No Bonus"
+
+                    df_bonus_full['ALERT_CATEGORY'] = df_bonus_full.apply(clasificar_bonus, axis=1)
+                    
+                    if seleccion_conceptos:
+                        df_bonus_filtered = df_bonus_full[df_bonus_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
+                    else:
+                        df_bonus_filtered = df_bonus_full.iloc[0:0] 
+                        
+                    if search_bon.strip() and not df_bonus_filtered.empty:
+                        term_bon = search_bon.strip()
+                        if term_bon.isdigit() and 'Global ID' in df_bonus_filtered.columns:
+                            mask_exact_bon = df_bonus_filtered['Global ID'].astype(str).str.replace(r'\.0$', '', regex=True) == term_bon
+                            df_bonus_filtered = df_bonus_filtered[mask_exact_bon]
+                        else:
+                            name_cols_bon = [c for c in df_bonus_filtered.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
+                            if not name_cols_bon: name_cols_bon = [c for c in df_bonus_filtered.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                            
+                            if name_cols_bon:
+                                mask_search_bon = np.column_stack([df_bonus_filtered[col].astype(str).str.contains(term_bon, case=False, na=False) for col in name_cols_bon]).any(axis=1)
+                                df_bonus_filtered = df_bonus_filtered[mask_search_bon]
+                            else:
+                                df_bonus_filtered = df_bonus_filtered.iloc[0:0]
+                        
+                    if not df_bonus_filtered.empty:
+                        st.write(f"Showing **{len(df_bonus_filtered)}** employees based on your criteria.")
+                        cols_bon = list(df_bonus_filtered.columns)
+                        if 'ALERT_CATEGORY' in cols_bon:
+                            cols_bon.insert(4, cols_bon.pop(cols_bon.index('ALERT_CATEGORY')))
+                            df_bonus_filtered = df_bonus_filtered[cols_bon]
+
+                        categorias_array = df_bonus_filtered['ALERT_CATEGORY'].values
+                        
+                        cols_to_drop_bon = ['BONUS_TGT_NUM', 'Date_in_SG_clean', 'Years_Raw']
+                        df_visual_bon = df_bonus_filtered.drop(columns=[c for c in cols_to_drop_bon if c in df_bonus_filtered.columns])
+                        
+                        cols_fijas_bon = list(df_visual_bon.columns[:4])
+                        df_visual_bon = df_visual_bon.set_index(cols_fijas_bon)
+                        
+                        def color_bonus_totales(df_vista):
+                            estilos = []
+                            for cat in categorias_array:
+                                if cat == "Above Target": estilos.append('background-color: #ffcccc')
+                                elif cat == "Below Target": estilos.append('background-color: #ffffcc')
+                                else: estilos.append('')
+                            style_dict = {col: estilos for col in df_vista.columns}
+                            return pd.DataFrame(style_dict, index=df_vista.index)
+                        
+                        df_bon_styled = df_visual_bon.style.apply(color_bonus_totales, axis=None)
+                        st.dataframe(df_bon_styled, use_container_width=True)
+                    else:
+                        if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
+                        else: st.info("Select one or more categories above to view employee details in this table.")
+                else:
+                    st.warning("No employees found with a Bonus Target > 0 based on current filters.")
+                    
+                return bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered
 
             # ==========================================
             #           FUNCIÓN: EQUITY PLANNING
@@ -1046,11 +1283,15 @@ if file1 is not None and file2 is not None:
             if pdf_mode:
                 sal_data = render_salary()
                 st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
+                bon_data = render_bonus()
+                st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
                 eq_data = render_equity()
             else:
-                tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
+                tab_salary, tab_bonus, tab_equity = st.tabs(["💰 Salary Planning", "🎯 Bonus Planning", "📈 Equity Planning"])
                 with tab_salary:
                     sal_data = render_salary()
+                with tab_bonus:
+                    bon_data = render_bonus()
                 with tab_equity:
                     eq_data = render_equity()
 
@@ -1072,6 +1313,7 @@ if file1 is not None and file2 is not None:
                     writer = pd.ExcelWriter(output)
                     
             with writer:
+                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1083,6 +1325,19 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
+                # Escribimos hojas de Bonus
+                if bon_data:
+                    bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
+                    if bon_summary_df is not None: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
+                    if bon_brk_org is not None: bon_brk_org.to_excel(writer, sheet_name='Bonus by Org', index=False)
+                    if bon_brk_func is not None: bon_brk_func.to_excel(writer, sheet_name='Bonus by Func', index=False)
+                    if df_bon_filtered is not None and not df_bon_filtered.empty:
+                        df_bon_excel = df_bon_filtered.copy()
+                        cols_e = ['Date_in_SG_clean', 'Years_Raw']
+                        df_bon_excel = df_bon_excel.drop(columns=[c for c in cols_e if c in df_bon_excel.columns])
+                        df_bon_excel.to_excel(writer, sheet_name='Bonus Details', index=False)
+                        
+                # Escribimos hojas de Equity
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
