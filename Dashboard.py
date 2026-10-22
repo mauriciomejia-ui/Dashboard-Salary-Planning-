@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-import matplotlib.subplots as subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
@@ -304,12 +303,14 @@ if file1 is not None and file2 is not None:
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
 
+                # Guardamos en DataFrame solo para exportarlo a Excel limpio
                 cost_df = pd.DataFrame({
                     "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
                     "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
+                # TABLA HTML RESPONSIVA (Evita recortes al imprimir)
                 summary_html = f"""
                 <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
                   <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
@@ -834,7 +835,7 @@ if file1 is not None and file2 is not None:
                         elif '%' in c_lower or 'percent' in c_lower:
                             if not col_bonus_pct: col_bonus_pct = c
                             
-                # Fallbacks heurísticos si no se encuentran por nombre exacto
+                # Fallbacks heurísticos
                 if not col_bonus_target:
                     targets = [c for c in df_filtered.columns if 'bonus target' in str(c).lower()]
                     if targets: col_bonus_target = targets[0]
@@ -848,22 +849,18 @@ if file1 is not None and file2 is not None:
                 
                 st.info(f"Using columns: Budget -> **{col_bonus_target}** | Proposed -> **{col_bonus_proposed}**")
                 
-                # Filtrar solo elegibles (Target > 0)
                 df_filtered['BONUS_TGT_NUM'] = pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(0)
                 df_bonus_full = df_filtered[df_filtered['BONUS_TGT_NUM'] > 0].copy()
                 
                 if not df_bonus_full.empty:
                     df_bonus_full = df_bonus_full.rename(columns={'Chief Name': 'Manager'})
-                    
                     df_bonus_full['Proposed Bonus Value'] = pd.to_numeric(df_bonus_full[col_bonus_proposed], errors='coerce').fillna(0)
                     
-                    # Calcular porcentaje de bono si no existe
                     if col_bonus_pct:
                         df_bonus_full['Bonus %'] = pd.to_numeric(df_bonus_full[col_bonus_pct], errors='coerce').fillna(0)
                     else:
-                        df_bonus_full['Bonus %'] = (df_bonus_full['Proposed Bonus Value'] / df_bonus_full['BONUS_TGT_NUM']) * 100
+                        df_bonus_full['Bonus %'] = np.where(df_bonus_full['BONUS_TGT_NUM'] > 0, (df_bonus_full['Proposed Bonus Value'] / df_bonus_full['BONUS_TGT_NUM']) * 100, 0)
 
-                    # Lógica para pastel
                     c_0 = (df_bonus_full['Bonus %'] == 0).sum()
                     c_below = ((df_bonus_full['Bonus %'] > 0) & (df_bonus_full['Bonus %'] < 100)).sum()
                     c_target = (df_bonus_full['Bonus %'] == 100).sum()
@@ -1326,7 +1323,7 @@ if file1 is not None and file2 is not None:
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
                 # Escribimos hojas de Bonus
-                if bon_data:
+                if 'bon_data' in locals() and bon_data:
                     bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
                     if bon_summary_df is not None: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
                     if bon_brk_org is not None: bon_brk_org.to_excel(writer, sheet_name='Bonus by Org', index=False)
