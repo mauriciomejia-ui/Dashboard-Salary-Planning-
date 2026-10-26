@@ -822,19 +822,29 @@ if file1 is not None and file2 is not None:
                 
                 for c in df_filtered.columns:
                     cl = str(c).lower().strip()
+                    # Buscar columna de Rating/Impacto
                     if 'rating' in cl or 'performance' in cl or 'impact' in cl:
                         if not col_rating: col_rating = c
                     
-                    if 'i% proposed io' in cl:
+                    # Prioridad 1: Columna que el usuario llama "% proposed IO"
+                    if '% proposed io' in cl or 'i% proposed io' in cl or 'proposed io %' in cl:
                         col_proposed_io = c
-                    elif 'io %' in cl or 'io range' in cl or ('proposed' in cl and 'io' in cl):
-                        if not col_proposed_io: col_proposed_io = c
+                        break # Encontrada exactamente, salir del loop
+                
+                # Fallback de búsqueda para IO%
+                if not col_proposed_io:
+                    for c in df_filtered.columns:
+                        cl = str(c).lower().strip()
+                        if 'io %' in cl or 'io range' in cl or ('proposed' in cl and 'io' in cl):
+                            col_proposed_io = c
+                            break
                         
                 if not col_rating:
-                    col_rating = 'Potential' 
+                    col_rating = 'Potential' # Fallback
                 
                 total_ees = len(df_filtered)
                 
+                # Configuración idéntica a la imagen
                 categories = [
                     {"label": "Extraordinary Impact", "ref": "~ 175%", "match": ["extraordinary"]},
                     {"label": "Positive Impact", "ref": "~ 108%", "match": ["positive"]},
@@ -844,6 +854,25 @@ if file1 is not None and file2 is not None:
                 table_data = []
                 total_count = 0
                 
+                # Identificar si existe la columna Target para calcular un backup manual del IO%
+                col_bonus_target = None
+                col_bonus_proposed_val = None
+                for c in df_filtered.columns:
+                    cl = str(c).lower().strip()
+                    if ('target' in cl or 'budget' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_target:
+                        col_bonus_target = c
+                    elif ('proposed' in cl or 'actual' in cl or 'total' in cl or 'recommend' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_proposed_val:
+                        col_bonus_proposed_val = c
+                
+                if col_bonus_target and col_bonus_proposed_val:
+                    df_filtered['Calculated_IO_Pct'] = np.where(
+                        pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(0) > 0,
+                        (pd.to_numeric(df_filtered[col_bonus_proposed_val], errors='coerce').fillna(0) / pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(1)) * 100,
+                        0
+                    )
+                else:
+                    df_filtered['Calculated_IO_Pct'] = 0
+
                 for cat in categories:
                     if col_rating in df_filtered.columns:
                         mask = df_filtered[col_rating].astype(str).str.lower().str.contains('|'.join(cat["match"]), na=False)
@@ -856,10 +885,22 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        vals = pd.to_numeric(subset[col_proposed_io].astype(str).str.replace('%','').str.replace(',',''), errors='coerce')
+                        # Extraer limpiamente para evitar NANs (Ignorar % o textos extraños)
+                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%','', regex=False).str.replace(',','', regex=False).str.strip()
+                        vals = pd.to_numeric(clean_vals, errors='coerce')
                         avg_io = vals.mean()
-                        if avg_io > 0 and avg_io < 10: 
+                        
+                        # Manejo de Anti-NaN / Red de Seguridad Matemática
+                        if pd.isna(avg_io):
+                            avg_io = subset['Calculated_IO_Pct'].mean() if not subset.empty else 0
+                        elif 0 < avg_io <= 10: 
                             avg_io = avg_io * 100
+                    elif not subset.empty:
+                        # Si no encontró la columna, usar la red de seguridad matemática
+                        avg_io = subset['Calculated_IO_Pct'].mean()
+                    
+                    if pd.isna(avg_io):
+                        avg_io = 0
                     
                     table_data.append({
                         "label": cat["label"],
@@ -872,7 +913,7 @@ if file1 is not None and file2 is not None:
                 
                 total_pct = (total_count / total_ees * 100) if total_ees > 0 else 0
                 
-                # --- CONSTRUIR TABLA HTML BLINDADA ---
+                # --- CONSTRUIR TABLA HTML EXACTA A LA IMAGEN ---
                 html_rows = ""
                 for d in table_data:
                     html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
@@ -881,26 +922,30 @@ if file1 is not None and file2 is not None:
                 
                 st.write(html_table, unsafe_allow_html=True)
                 
-                # --- GRÁFICA DE BARRAS EXACTA ---
+                # --- GRÁFICA DE BARRAS EXACTA A LA IMAGEN ---
                 fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
                 x_labels = [d['label'] for d in table_data]
                 y_vals = [d['avg_io'] for d in table_data]
                 
                 bars_b = ax_bon.bar(x_labels, y_vals, width=0.5, color='#5a84f1')
                 
+                # Ajustar Eje Y para que sea 0, 50, 100, 150, 200
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
                 ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
                 
+                # Líneas de cuadrícula sutiles
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
+                # Textos blancos dentro de las barras
                 for bar in bars_b:
                     yval = bar.get_height()
                     if yval > 0:
                         ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', 
                                   ha='center', va='top', color='white', fontweight='bold', fontsize=11)
                 
+                # Limpiar bordes para que quede minimalista
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
                 ax_bon.spines['left'].set_visible(False)
@@ -993,7 +1038,8 @@ if file1 is not None and file2 is not None:
                                 status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
                                 
                             st.markdown("##### Total Equity Budget Summary")
-                            summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
+                            summary_html = f"""
+                            <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
                               <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
@@ -1004,8 +1050,9 @@ if file1 is not None and file2 is not None:
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
                               </tr>
-                            </table>"""
-                            st.write(summary_html, unsafe_allow_html=True)
+                            </table>
+                            """
+                            st.markdown(summary_html, unsafe_allow_html=True)
                             
                         # --- DESGLOSE DE EQUITY (BREAKDOWN) ---
                         st.markdown("### 🏢 Equity Breakdown (By Org & Function)")
@@ -1170,6 +1217,7 @@ if file1 is not None and file2 is not None:
                     writer = pd.ExcelWriter(output)
                     
             with writer:
+                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1181,6 +1229,7 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
+                # Escribimos hojas de Bonus
                 if 'bon_data' in locals() and bon_data:
                     bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
                     if bon_summary_df is not None and not bon_summary_df.empty: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
@@ -1192,6 +1241,7 @@ if file1 is not None and file2 is not None:
                         df_bon_excel = df_bon_excel.drop(columns=[c for c in cols_e if c in df_bon_excel.columns])
                         df_bon_excel.to_excel(writer, sheet_name='Bonus Details', index=False)
                         
+                # Escribimos hojas de Equity
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
