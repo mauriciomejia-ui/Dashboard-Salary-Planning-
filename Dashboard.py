@@ -816,35 +816,22 @@ if file1 is not None and file2 is not None:
                 bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered = None, None, None, None
                 st.subheader("🎯 Bonus IO Planning")
                 
-                # Buscar columnas de Bonus e Impacto dinámicamente
                 col_rating = None
-                col_proposed_io = None
                 
+                # Buscar dinámicamente la columna de Rating
                 for c in df_filtered.columns:
                     cl = str(c).lower().strip()
-                    # Buscar columna de Rating/Impacto
                     if 'rating' in cl or 'performance' in cl or 'impact' in cl:
                         if not col_rating: col_rating = c
-                    
-                    # Prioridad 1: Columna que el usuario llama "% proposed IO"
-                    if '% proposed io' in cl or 'i% proposed io' in cl or 'proposed io %' in cl:
-                        col_proposed_io = c
-                        break # Encontrada exactamente, salir del loop
-                
-                # Fallback de búsqueda para IO%
-                if not col_proposed_io:
-                    for c in df_filtered.columns:
-                        cl = str(c).lower().strip()
-                        if 'io %' in cl or 'io range' in cl or ('proposed' in cl and 'io' in cl):
-                            col_proposed_io = c
-                            break
                         
                 if not col_rating:
                     col_rating = 'Potential' # Fallback
                 
+                # EXTRACCIÓN EXACTA DE LA COLUMNA N (Índice 13)
+                col_proposed_io = df_filtered.columns[13] if len(df_filtered.columns) > 13 else None
+                
                 total_ees = len(df_filtered)
                 
-                # Configuración idéntica a la imagen
                 categories = [
                     {"label": "Extraordinary Impact", "ref": "~ 175%", "match": ["extraordinary"]},
                     {"label": "Positive Impact", "ref": "~ 108%", "match": ["positive"]},
@@ -854,25 +841,6 @@ if file1 is not None and file2 is not None:
                 table_data = []
                 total_count = 0
                 
-                # Identificar si existe la columna Target para calcular un backup manual del IO%
-                col_bonus_target = None
-                col_bonus_proposed_val = None
-                for c in df_filtered.columns:
-                    cl = str(c).lower().strip()
-                    if ('target' in cl or 'budget' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_target:
-                        col_bonus_target = c
-                    elif ('proposed' in cl or 'actual' in cl or 'total' in cl or 'recommend' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_proposed_val:
-                        col_bonus_proposed_val = c
-                
-                if col_bonus_target and col_bonus_proposed_val:
-                    df_filtered['Calculated_IO_Pct'] = np.where(
-                        pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(0) > 0,
-                        (pd.to_numeric(df_filtered[col_bonus_proposed_val], errors='coerce').fillna(0) / pd.to_numeric(df_filtered[col_bonus_target], errors='coerce').fillna(1)) * 100,
-                        0
-                    )
-                else:
-                    df_filtered['Calculated_IO_Pct'] = 0
-
                 for cat in categories:
                     if col_rating in df_filtered.columns:
                         mask = df_filtered[col_rating].astype(str).str.lower().str.contains('|'.join(cat["match"]), na=False)
@@ -885,22 +853,20 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        # Extraer limpiamente para evitar NANs (Ignorar % o textos extraños)
+                        # Extraer la data, quitar los "%" o "," para que pueda convertirse a número
                         clean_vals = subset[col_proposed_io].astype(str).str.replace('%','', regex=False).str.replace(',','', regex=False).str.strip()
-                        vals = pd.to_numeric(clean_vals, errors='coerce')
-                        avg_io = vals.mean()
                         
-                        # Manejo de Anti-NaN / Red de Seguridad Matemática
-                        if pd.isna(avg_io):
-                            avg_io = subset['Calculated_IO_Pct'].mean() if not subset.empty else 0
-                        elif 0 < avg_io <= 10: 
-                            avg_io = avg_io * 100
-                    elif not subset.empty:
-                        # Si no encontró la columna, usar la red de seguridad matemática
-                        avg_io = subset['Calculated_IO_Pct'].mean()
-                    
-                    if pd.isna(avg_io):
-                        avg_io = 0
+                        # Convertir a números, los vacíos (o textos inválidos) se vuelven NaN automáticamente
+                        vals = pd.to_numeric(clean_vals, errors='coerce')
+                        
+                        # ANTI-NAN: Botamos los NaNs para que NO cuenten en el promedio
+                        vals = vals.dropna()
+                        
+                        if not vals.empty:
+                            avg_io = vals.mean()
+                            # Ajuste de escala: si el promedio salió como 1.5 en lugar de 150%
+                            if 0 < avg_io <= 10: 
+                                avg_io = avg_io * 100
                     
                     table_data.append({
                         "label": cat["label"],
@@ -913,12 +879,12 @@ if file1 is not None and file2 is not None:
                 
                 total_pct = (total_count / total_ees * 100) if total_ees > 0 else 0
                 
-                # --- CONSTRUIR TABLA HTML EXACTA A LA IMAGEN ---
+                # --- CONSTRUIR TABLA HTML EXACTA (BLINDADA CONTRA ESPACIOS) ---
                 html_rows = ""
                 for d in table_data:
                     html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
                 
-                html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">IO % Range</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
+                html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
                 
                 st.write(html_table, unsafe_allow_html=True)
                 
@@ -929,23 +895,19 @@ if file1 is not None and file2 is not None:
                 
                 bars_b = ax_bon.bar(x_labels, y_vals, width=0.5, color='#5a84f1')
                 
-                # Ajustar Eje Y para que sea 0, 50, 100, 150, 200
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
                 ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
                 
-                # Líneas de cuadrícula sutiles
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
-                # Textos blancos dentro de las barras
                 for bar in bars_b:
                     yval = bar.get_height()
                     if yval > 0:
                         ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', 
                                   ha='center', va='top', color='white', fontweight='bold', fontsize=11)
                 
-                # Limpiar bordes para que quede minimalista
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
                 ax_bon.spines['left'].set_visible(False)
