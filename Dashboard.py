@@ -440,6 +440,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax1.text(0.5, 0.5, "No data", ha='center', va='center')
                     st.pyplot(fig1)
+                    plt.close(fig1)
 
                 with col2:
                     fig2, ax2 = plt.subplots(figsize=(7, 6))
@@ -466,6 +467,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax2.text(0.5, 0.5, "No data", ha='center', va='center')
                     st.pyplot(fig2)
+                    plt.close(fig2)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col3, col4 = st.columns(2)
@@ -497,6 +499,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
                     st.pyplot(fig3)
+                    plt.close(fig3)
 
                 with col4:
                     fig4, ax4 = plt.subplots(figsize=(7, 6))
@@ -524,6 +527,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax4.text(0.5, 0.5, "No movements", ha='center', va='center')
                     st.pyplot(fig4)
+                    plt.close(fig4)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col5, col6 = st.columns(2)
@@ -565,6 +569,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax5.text(0.5, 0.5, "Quartile Columns missing", ha='center', va='center')
                     st.pyplot(fig5)
+                    plt.close(fig5)
 
                 with col6:
                     fig6, ax6 = plt.subplots(figsize=(7, 6))
@@ -593,6 +598,7 @@ if file1 is not None and file2 is not None:
                     else:
                         ax6.text(0.5, 0.5, "No Gender data", ha='center', va='center')
                     st.pyplot(fig6)
+                    plt.close(fig6)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
@@ -638,6 +644,7 @@ if file1 is not None and file2 is not None:
                     fig_new.tight_layout()
                     
                     st.pyplot(fig_new)
+                    plt.close(fig_new)
                 else:
                     st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
                 
@@ -813,6 +820,7 @@ if file1 is not None and file2 is not None:
             #           FUNCIÓN: BONUS PLANNING
             # ==========================================
             def render_bonus():
+                bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered = None, None, None, None
                 st.subheader("🎯 Bonus IO Planning")
                 
                 col_rating = None
@@ -873,8 +881,8 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        # Limpiar y convertir a numérico ignorando strings puros
-                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%','', regex=False).str.replace(',','', regex=False).str.strip()
+                        # Limpiar y convertir a numérico ignorando strings puros (sin regex=False para compatibilidad)
+                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '').str.replace(',', '').str.strip()
                         vals = pd.to_numeric(clean_vals, errors='coerce').dropna()
                         
                         if not vals.empty:
@@ -905,7 +913,8 @@ if file1 is not None and file2 is not None:
                 
                 html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
                 
-                st.write(html_table, unsafe_allow_html=True)
+                # SE DEBE USAR st.markdown CON unsafe_allow_html=True
+                st.markdown(html_table, unsafe_allow_html=True)
                 
                 # --- GRÁFICA DE BARRAS EXACTA A LA IMAGEN ---
                 fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
@@ -935,6 +944,7 @@ if file1 is not None and file2 is not None:
                 ax_bon.tick_params(axis='y', length=0)
                 
                 st.pyplot(fig_bon)
+                plt.close(fig_bon)
                 
                 # --- DYNAMIC STAFF TABLE PARA BONOS ---
                 st.markdown("---")
@@ -962,14 +972,14 @@ if file1 is not None and file2 is not None:
                 c_ior = get_best_col(['io range', 'io % range', 'target io', 'io target'])
                 c_comm = get_best_col(['comments for io', 'io comment', 'bonus comment', 'comment', 'reason'])
                 
-                # Ensamblar las columnas asegurando que existan
                 cols_to_show = []
                 for c in [c_name, c_id, c_pos, c_sg, c_sgr, col_rating, c_ior, col_proposed_io, c_comm]:
                     if c and c in df_bonus_table.columns and c not in cols_to_show:
                         cols_to_show.append(c)
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
-                st.dataframe(df_bonus_table[cols_to_show], use_container_width=True)
+                if not df_bonus_table.empty and cols_to_show:
+                    st.dataframe(df_bonus_table[cols_to_show], use_container_width=True)
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -1037,6 +1047,7 @@ if file1 is not None and file2 is not None:
                             else:
                                 ax_eq.text(0.5, 0.5, "No data available", ha='center', va='center')
                             st.pyplot(fig_eq)
+                            plt.close(fig_eq)
                         
                         with col_summary:
                             equity_budget = val_bl_full.sum()
@@ -1055,8 +1066,7 @@ if file1 is not None and file2 is not None:
                                 status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
                                 
                             st.markdown("##### Total Equity Budget Summary")
-                            summary_html = f"""
-                            <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
+                            summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
                               <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
@@ -1067,8 +1077,7 @@ if file1 is not None and file2 is not None:
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
                               </tr>
-                            </table>
-                            """
+                            </table>"""
                             st.markdown(summary_html, unsafe_allow_html=True)
                             
                         # --- DESGLOSE DE EQUITY (BREAKDOWN) ---
