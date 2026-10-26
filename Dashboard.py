@@ -813,7 +813,6 @@ if file1 is not None and file2 is not None:
             #           FUNCIÓN: BONUS PLANNING
             # ==========================================
             def render_bonus():
-                bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered = None, None, None, None
                 st.subheader("🎯 Bonus IO Planning")
                 
                 col_rating = None
@@ -841,10 +840,31 @@ if file1 is not None and file2 is not None:
                 table_data = []
                 total_count = 0
                 
+                # Respaldo Matemático por si la Columna N falla
+                col_bonus_target = None
+                col_bonus_proposed_val = None
+                for c in df_filtered.columns:
+                    cl = str(c).lower().strip()
+                    if ('target' in cl or 'budget' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_target:
+                        col_bonus_target = c
+                    elif ('proposed' in cl or 'actual' in cl or 'total' in cl or 'recommend' in cl) and ('amount' in cl or '$' in cl or 'value' in cl) and not col_bonus_proposed_val:
+                        col_bonus_proposed_val = c
+                
+                df_bonus_full = df_filtered.copy()
+                
+                if col_bonus_target and col_bonus_proposed_val:
+                    df_bonus_full['Calculated_IO_Pct'] = np.where(
+                        pd.to_numeric(df_bonus_full[col_bonus_target], errors='coerce').fillna(0) > 0,
+                        (pd.to_numeric(df_bonus_full[col_bonus_proposed_val], errors='coerce').fillna(0) / pd.to_numeric(df_bonus_full[col_bonus_target], errors='coerce').fillna(1)) * 100,
+                        0
+                    )
+                else:
+                    df_bonus_full['Calculated_IO_Pct'] = 0
+
                 for cat in categories:
-                    if col_rating in df_filtered.columns:
-                        mask = df_filtered[col_rating].astype(str).str.lower().str.contains('|'.join(cat["match"]), na=False)
-                        subset = df_filtered[mask]
+                    if col_rating in df_bonus_full.columns:
+                        mask = df_bonus_full[col_rating].astype(str).str.lower().str.contains('|'.join(cat["match"]), na=False)
+                        subset = df_bonus_full[mask]
                     else:
                         subset = pd.DataFrame()
                         
@@ -853,20 +873,19 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        # Extraer la data, quitar los "%" o "," para que pueda convertirse a número
+                        # Limpiar y convertir a numérico ignorando strings puros
                         clean_vals = subset[col_proposed_io].astype(str).str.replace('%','', regex=False).str.replace(',','', regex=False).str.strip()
-                        
-                        # Convertir a números, los vacíos (o textos inválidos) se vuelven NaN automáticamente
-                        vals = pd.to_numeric(clean_vals, errors='coerce')
-                        
-                        # ANTI-NAN: Botamos los NaNs para que NO cuenten en el promedio
-                        vals = vals.dropna()
+                        vals = pd.to_numeric(clean_vals, errors='coerce').dropna()
                         
                         if not vals.empty:
                             avg_io = vals.mean()
-                            # Ajuste de escala: si el promedio salió como 1.5 en lugar de 150%
-                            if 0 < avg_io <= 10: 
-                                avg_io = avg_io * 100
+                            if 0 < avg_io <= 10: avg_io = avg_io * 100
+                        else:
+                            avg_io = subset['Calculated_IO_Pct'].mean() if not subset.empty else 0
+                    elif not subset.empty:
+                        avg_io = subset['Calculated_IO_Pct'].mean()
+                    
+                    if pd.isna(avg_io): avg_io = 0
                     
                     table_data.append({
                         "label": cat["label"],
@@ -879,7 +898,7 @@ if file1 is not None and file2 is not None:
                 
                 total_pct = (total_count / total_ees * 100) if total_ees > 0 else 0
                 
-                # --- CONSTRUIR TABLA HTML EXACTA (BLINDADA CONTRA ESPACIOS) ---
+                # --- CONSTRUIR TABLA HTML BLINDADA ---
                 html_rows = ""
                 for d in table_data:
                     html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
@@ -917,7 +936,43 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig_bon)
                 
-                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+                # --- DYNAMIC STAFF TABLE PARA BONOS ---
+                st.markdown("---")
+                st.markdown("### 👥 Bonus Eligible Employees List")
+                
+                rating_options = sorted(df_bonus_full[col_rating].dropna().astype(str).unique().tolist())
+                selected_ratings = st.multiselect("1. Filter by Performance Rating:", options=rating_options, default=[])
+                
+                df_bonus_table = df_bonus_full.copy()
+                if selected_ratings:
+                    df_bonus_table = df_bonus_table[df_bonus_table[col_rating].astype(str).isin(selected_ratings)]
+                
+                def get_best_col(keywords, excludes=[]):
+                    for c in df_bonus_table.columns:
+                        cl = str(c).lower().strip()
+                        if any(ex in cl for ex in excludes): continue
+                        if any(kw in cl for kw in keywords): return c
+                    return None
+                    
+                c_name = get_best_col(['employee name', 'full name', 'first name', 'last name', 'name'], ['manager', 'chief', 'company'])
+                c_id = 'Global ID'
+                c_pos = get_best_col(['position', 'job title', 'title'])
+                c_sgr = get_best_col(['grade range', 'pay range', 'salary range', 'range'])
+                c_sg = get_best_col(['salary grade', 'grade', 'sg'], ['range'])
+                c_ior = get_best_col(['io range', 'io % range', 'target io', 'io target'])
+                c_comm = get_best_col(['comments for io', 'io comment', 'bonus comment', 'comment', 'reason'])
+                
+                # Ensamblar las columnas asegurando que existan
+                cols_to_show = []
+                for c in [c_name, c_id, c_pos, c_sg, c_sgr, col_rating, c_ior, col_proposed_io, c_comm]:
+                    if c and c in df_bonus_table.columns and c not in cols_to_show:
+                        cols_to_show.append(c)
+                        
+                st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
+                st.dataframe(df_bonus_table[cols_to_show], use_container_width=True)
+                
+                bon_summary_df = pd.DataFrame(table_data)
+                return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
 
             # ==========================================
             #           FUNCIÓN: EQUITY PLANNING
@@ -1199,7 +1254,7 @@ if file1 is not None and file2 is not None:
                     if bon_brk_func is not None and not bon_brk_func.empty: bon_brk_func.to_excel(writer, sheet_name='Bonus by Func', index=False)
                     if df_bon_filtered is not None and not df_bon_filtered.empty:
                         df_bon_excel = df_bon_filtered.copy()
-                        cols_e = ['Date_in_SG_clean', 'Years_Raw']
+                        cols_e = ['Date_in_SG_clean', 'Years_Raw', 'Calculated_IO_Pct']
                         df_bon_excel = df_bon_excel.drop(columns=[c for c in cols_e if c in df_bon_excel.columns])
                         df_bon_excel.to_excel(writer, sheet_name='Bonus Details', index=False)
                         
