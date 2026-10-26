@@ -186,7 +186,6 @@ if file1 is not None and file2 is not None:
             elif ('qrtle' in c_lower or 'quartile' in c_lower) and 'new' not in c_lower:
                 col_curr_qrtle = c
                     
-        # Fallbacks a índices
         if not col_date_sg and len(df_filtered.columns) > 25: col_date_sg = df_filtered.columns[25]
         if not col_curr_qrtle and len(df_filtered.columns) > 22: col_curr_qrtle = df_filtered.columns[22]
         if not col_new_qrtle and len(df_filtered.columns) > 49: col_new_qrtle = df_filtered.columns[49]
@@ -310,8 +309,7 @@ if file1 is not None and file2 is not None:
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
-                summary_html = f"""
-                <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
+                summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
                   <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                     <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Adj Cost</th>
                     <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Promo Cost</th>
@@ -328,8 +326,7 @@ if file1 is not None and file2 is not None:
                     <td style="padding: 10px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
                     <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight:bold;">{pct_incremento:,.2f}%</td>
                   </tr>
-                </table>
-                """
+                </table>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
                 # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
@@ -816,6 +813,7 @@ if file1 is not None and file2 is not None:
             #           FUNCIÓN: BONUS PLANNING
             # ==========================================
             def render_bonus():
+                bon_summary_df, df_brk_org, df_brk_func, df_bonus_filtered = None, None, None, None
                 st.subheader("🎯 Bonus IO Planning")
                 
                 # Buscar columnas de Bonus e Impacto dinámicamente
@@ -824,22 +822,19 @@ if file1 is not None and file2 is not None:
                 
                 for c in df_filtered.columns:
                     cl = str(c).lower().strip()
-                    # Buscar columna de Rating/Impacto
                     if 'rating' in cl or 'performance' in cl or 'impact' in cl:
                         if not col_rating: col_rating = c
                     
-                    # Buscar columna de IO propuesto
                     if 'i% proposed io' in cl:
                         col_proposed_io = c
                     elif 'io %' in cl or 'io range' in cl or ('proposed' in cl and 'io' in cl):
                         if not col_proposed_io: col_proposed_io = c
                         
                 if not col_rating:
-                    col_rating = 'Potential' # Fallback
+                    col_rating = 'Potential' 
                 
                 total_ees = len(df_filtered)
                 
-                # Configuración idéntica a la imagen
                 categories = [
                     {"label": "Extraordinary Impact", "ref": "~ 175%", "match": ["extraordinary"]},
                     {"label": "Positive Impact", "ref": "~ 108%", "match": ["positive"]},
@@ -861,10 +856,8 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        # Limpiamos símbolos si los hay y convertimos a numérico
                         vals = pd.to_numeric(subset[col_proposed_io].astype(str).str.replace('%','').str.replace(',',''), errors='coerce')
                         avg_io = vals.mean()
-                        # Ajustar por si vienen en decimal (ej. 1.67) en lugar de entero (167)
                         if avg_io > 0 and avg_io < 10: 
                             avg_io = avg_io * 100
                     
@@ -879,68 +872,35 @@ if file1 is not None and file2 is not None:
                 
                 total_pct = (total_count / total_ees * 100) if total_ees > 0 else 0
                 
-                # --- CONSTRUIR TABLA HTML EXACTA A LA IMAGEN ---
-                html_table = f"""
-                <div style="max-width: 900px; margin-bottom: 40px;">
-                <table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;">
-                  <tr style="background-color: #0F253F; color: white;">
-                    <th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">IO % Range</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th>
-                  </tr>
-                """
-                
+                # --- CONSTRUIR TABLA HTML BLINDADA ---
+                html_rows = ""
                 for d in table_data:
-                    html_table += f"""
-                      <tr style="background-color: white;">
-                        <td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d['label']}</td>
-                        <td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d['count']}</td>
-                        <td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d['pct']:.0f}%</td>
-                        <td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d['avg_io']:.0f}%</td>
-                        <td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d['ref']}</td>
-                      </tr>
-                    """
+                    html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
                 
-                # Fila de Totales con línea separadora
-                html_table += f"""
-                  <tr style="background-color: white;">
-                    <td style="padding: 10px; border: none; text-align:left;"></td>
-                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td>
-                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td>
-                    <td style="padding: 10px; border: none;"></td>
-                    <td style="padding: 10px; border: none;"></td>
-                  </tr>
-                </table>
-                </div>
-                """
-                st.markdown(html_table, unsafe_allow_html=True)
+                html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">IO % Range</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
                 
-                # --- GRÁFICA DE BARRAS EXACTA A LA IMAGEN ---
+                st.write(html_table, unsafe_allow_html=True)
+                
+                # --- GRÁFICA DE BARRAS EXACTA ---
                 fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
                 x_labels = [d['label'] for d in table_data]
                 y_vals = [d['avg_io'] for d in table_data]
                 
                 bars_b = ax_bon.bar(x_labels, y_vals, width=0.5, color='#5a84f1')
                 
-                # Ajustar Eje Y para que sea 0, 50, 100, 150, 200
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
                 ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
                 
-                # Líneas de cuadrícula sutiles
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
-                # Textos blancos dentro de las barras
                 for bar in bars_b:
                     yval = bar.get_height()
                     if yval > 0:
                         ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', 
                                   ha='center', va='top', color='white', fontweight='bold', fontsize=11)
                 
-                # Limpiar bordes para que quede minimalista
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
                 ax_bon.spines['left'].set_visible(False)
@@ -950,7 +910,6 @@ if file1 is not None and file2 is not None:
                 
                 st.pyplot(fig_bon)
                 
-                # Dummy return para no romper el Excel original
                 return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
             # ==========================================
@@ -1034,8 +993,7 @@ if file1 is not None and file2 is not None:
                                 status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
                                 
                             st.markdown("##### Total Equity Budget Summary")
-                            summary_html = f"""
-                            <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
+                            summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
                               <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Proposed Recommendation Value</th>
@@ -1046,9 +1004,8 @@ if file1 is not None and file2 is not None:
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">${total_proposed:,.2f}</td>
                                 <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
                               </tr>
-                            </table>
-                            """
-                            st.markdown(summary_html, unsafe_allow_html=True)
+                            </table>"""
+                            st.write(summary_html, unsafe_allow_html=True)
                             
                         # --- DESGLOSE DE EQUITY (BREAKDOWN) ---
                         st.markdown("### 🏢 Equity Breakdown (By Org & Function)")
@@ -1213,7 +1170,6 @@ if file1 is not None and file2 is not None:
                     writer = pd.ExcelWriter(output)
                     
             with writer:
-                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1225,7 +1181,17 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
-                # Escribimos hojas de Equity
+                if 'bon_data' in locals() and bon_data:
+                    bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
+                    if bon_summary_df is not None and not bon_summary_df.empty: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
+                    if bon_brk_org is not None and not bon_brk_org.empty: bon_brk_org.to_excel(writer, sheet_name='Bonus by Org', index=False)
+                    if bon_brk_func is not None and not bon_brk_func.empty: bon_brk_func.to_excel(writer, sheet_name='Bonus by Func', index=False)
+                    if df_bon_filtered is not None and not df_bon_filtered.empty:
+                        df_bon_excel = df_bon_filtered.copy()
+                        cols_e = ['Date_in_SG_clean', 'Years_Raw']
+                        df_bon_excel = df_bon_excel.drop(columns=[c for c in cols_e if c in df_bon_excel.columns])
+                        df_bon_excel.to_excel(writer, sheet_name='Bonus Details', index=False)
+                        
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
