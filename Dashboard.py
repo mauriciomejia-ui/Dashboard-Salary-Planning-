@@ -297,7 +297,6 @@ if file1 is not None and file2 is not None:
                 """
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
-                # REEMPLAZO DE TABS ANIDADOS POR COLUMNAS
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 
                 def build_cost_breakdown(df_base, col_name, b_pct):
@@ -385,7 +384,7 @@ if file1 is not None and file2 is not None:
                         ax1.axis('equal') 
                         ax1.set_title('Overall Movement', fontweight='bold', pad=15)
                         st.pyplot(fig1)
-                        plt.close(fig1)
+                    plt.close(fig1)
 
                 with col2:
                     fig2, ax2 = plt.subplots(figsize=(7, 6))
@@ -404,7 +403,7 @@ if file1 is not None and file2 is not None:
                         ax2.axis('equal')
                         ax2.set_title('Movement Details', fontweight='bold', pad=15)
                         st.pyplot(fig2)
-                        plt.close(fig2)
+                    plt.close(fig2)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col3, col4 = st.columns(2)
@@ -424,7 +423,7 @@ if file1 is not None and file2 is not None:
                             ax3.axis('equal')
                             ax3.set_title('Adjustment Split (Reason)', fontweight='bold', pad=15)
                             st.pyplot(fig3)
-                            plt.close(fig3)
+                    plt.close(fig3)
 
                 with col4:
                     fig4, ax4 = plt.subplots(figsize=(7, 6))
@@ -440,7 +439,7 @@ if file1 is not None and file2 is not None:
                             ax4.axis('equal')
                             ax4.set_title('Movements by Potential Split', fontweight='bold', pad=15)
                             st.pyplot(fig4)
-                            plt.close(fig4)
+                    plt.close(fig4)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col5, col6 = st.columns(2)
@@ -478,7 +477,7 @@ if file1 is not None and file2 is not None:
                         ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
                         fig5.tight_layout()
                         st.pyplot(fig5)
-                        plt.close(fig5)
+                    plt.close(fig5)
 
                 with col6:
                     fig6, ax6 = plt.subplots(figsize=(7, 6))
@@ -499,7 +498,7 @@ if file1 is not None and file2 is not None:
                             ax6.spines['right'].set_visible(False)
                             fig6.tight_layout()
                             st.pyplot(fig6)
-                            plt.close(fig6)
+                    plt.close(fig6)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📈 Years in SG vs New Quartile (High Potential & Strategic Few)")
@@ -654,8 +653,11 @@ if file1 is not None and file2 is not None:
                         
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
-                        colores_array = df_detalle['RowColor'].values
                         
+                        # --- FIX: FORZAR STRING EN TODO EL DATAFRAME VISUAL PARA EVITAR PYARROW CRASH ---
+                        df_visual = df_visual.astype(str)
+                        
+                        colores_array = df_detalle['RowColor'].values
                         cols_fijas = list(df_visual.columns[:4])
                         df_visual = df_visual.set_index(cols_fijas)
                         
@@ -849,7 +851,8 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    st.dataframe(df_bonus_table[cols_to_show], use_container_width=True)
+                    # FIX: FORZAR STRING PARA EVITAR PYARROW CRASH
+                    st.dataframe(df_bonus_table[cols_to_show].astype(str), use_container_width=True)
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -947,7 +950,6 @@ if file1 is not None and file2 is not None:
                             </table>"""
                             st.markdown(summary_html, unsafe_allow_html=True)
                             
-                        # REEMPLAZO DE TABS ANIDADOS POR COLUMNAS
                         st.markdown("### 🏢 Equity Breakdown (By Org & Function)")
                         
                         def build_equity_breakdown(df_base, col_name):
@@ -1037,6 +1039,10 @@ if file1 is not None and file2 is not None:
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
+                            
+                            # FIX: FORZAR STRING EN TODO EL DATAFRAME VISUAL PARA EVITAR PYARROW CRASH
+                            df_visual_eq = df_visual_eq.astype(str)
+                            
                             cols_fijas_eq = list(df_visual_eq.columns[:4])
                             df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
