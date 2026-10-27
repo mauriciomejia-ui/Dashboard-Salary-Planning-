@@ -2,19 +2,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import seaborn as sns
 import json
 import os
 import numpy as np
 import io
 
-# ¡ESTA LÍNEA DEBE SER OBLIGATORIAMENTE LA PRIMERA DE STREAMLIT!
+# Page Configuration
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
-
-# Limpieza de memoria gráfica
-plt.close('all')
-
 st.title("Salary Planning Dashboard")
 st.write("Upload your Excel files to view and filter metrics.")
 
@@ -23,11 +18,8 @@ ARCHIVO_FILTROS = 'mis_filtros_guardados.json'
 
 def cargar_memoria():
     if os.path.exists(ARCHIVO_FILTROS):
-        try:
-            with open(ARCHIVO_FILTROS, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        with open(ARCHIVO_FILTROS, 'r', encoding='utf-8') as f:
+            return json.load(f)
     return {}
 
 if 'memoria_filtros' not in st.session_state:
@@ -56,9 +48,9 @@ def get_date(val):
 # --- FILE UPLOADER ---
 col_up1, col_up2 = st.columns(2)
 with col_up1:
-    file1 = st.file_uploader("1. Upload the Main file (e.g., colgate_...xlsx)", type=["xlsx", "xls"], key="up_main")
+    file1 = st.file_uploader("1. Upload the Main file (e.g., colgate_...xlsx)", type=["xlsx", "xls"])
 with col_up2:
-    file2 = st.file_uploader("2. Upload the SuperFlex file (SuperFlex-DefaultView...)", type=["xlsx", "xls"], key="up_flex")
+    file2 = st.file_uploader("2. Upload the SuperFlex file (SuperFlex-DefaultView...)", type=["xlsx", "xls"])
 
 if file1 is not None and file2 is not None:
     try:
@@ -98,7 +90,7 @@ if file1 is not None and file2 is not None:
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
         nombres_disponibles = ["-- None --"] + list(st.session_state['memoria_filtros'].keys())
-        filtro_elegido = st.sidebar.selectbox("Load a configuration:", nombres_disponibles, key="load_cfg")
+        filtro_elegido = st.sidebar.selectbox("Load a configuration:", nombres_disponibles)
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
@@ -131,19 +123,19 @@ if file1 is not None and file2 is not None:
         def_subgroups = [x for x in def_subgroups if x in subgroup_options]
         def_potentials = [x for x in def_potentials if x in potential_options]
 
-        selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes, key="f_mgr")
-        selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs, key="f_org")
-        selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs, key="f_func")
-        selected_comps = st.sidebar.multiselect("Compensation Area:", comp_options, default=def_comps, key="f_comp")
-        selected_subgroups = st.sidebar.multiselect("Employee Subgroup:", subgroup_options, default=def_subgroups, key="f_sg")
-        selected_potentials = st.sidebar.multiselect("Potential (Col Y):", potential_options, default=def_potentials, key="f_pot")
+        selected_gerentes = st.sidebar.multiselect("Manager(s):", gerente_options, default=def_gerentes)
+        selected_orgs = st.sidebar.multiselect("Reporting Organization:", org_options, default=def_orgs)
+        selected_funcs = st.sidebar.multiselect("Function:", func_options, default=def_funcs)
+        selected_comps = st.sidebar.multiselect("Compensation Area:", comp_options, default=def_comps)
+        selected_subgroups = st.sidebar.multiselect("Employee Subgroup:", subgroup_options, default=def_subgroups)
+        selected_potentials = st.sidebar.multiselect("Potential (Col Y):", potential_options, default=def_potentials)
         
         # --- SIDEBAR: SAVE NEW FILTER ---
         st.sidebar.markdown("---")
         st.sidebar.subheader("✏️ Save current combination")
-        nuevo_nombre = st.sidebar.text_input("Give this filter a title:", key="save_title")
+        nuevo_nombre = st.sidebar.text_input("Give this filter a title:")
         
-        if st.sidebar.button("Save Filter", key="save_btn"):
+        if st.sidebar.button("Save Filter"):
             if nuevo_nombre:
                 st.session_state['memoria_filtros'][nuevo_nombre] = {
                     "gerentes": selected_gerentes,
@@ -229,15 +221,16 @@ if file1 is not None and file2 is not None:
         else:
             df_filtered['New Quartile'] = "Unknown"
 
+
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
             # ==========================================
-            # SECCIÓN DE EXPORTACIÓN A PDF (SIDEBAR)
+            # SECCIÓN DE EXPORTACIÓN Y PDF (SIDEBAR)
             # ==========================================
             st.sidebar.markdown("---")
             st.sidebar.subheader("📄 Export Report")
-            pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)", key="pdf_mode_check")
+            pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
             if pdf_mode:
                 st.markdown("""
@@ -251,22 +244,40 @@ if file1 is not None and file2 is not None:
                         width: 100% !important;
                         padding: 1cm !important;
                     }
-                    @page { size: landscape; margin: 1cm; }
+                    @page {
+                        size: landscape;
+                        margin: 1cm;
+                    }
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                st.sidebar.success("✅ PDF mode active. Press **Ctrl + P** (or Cmd + P) in your browser and select 'Save as PDF'. Ensure 'Background graphics' is enabled.")
+                
+                components.html(
+                    """
+                    <script>
+                    function printDashboard() {
+                        window.parent.print();
+                    }
+                    </script>
+                    <button onclick="printDashboard()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: sans-serif;">
+                        🖨️ Save Dashboard as PDF
+                    </button>
+                    """,
+                    height=50
+                )
+                st.sidebar.info("Tip: In the print dialog, select 'Save as PDF', enable 'Background Graphics', and hide Headers/Footers.")
 
             # ==========================================
             #           FUNCIÓN: SALARY PLANNING
             # ==========================================
             def render_salary():
                 df_breakdown_org, df_breakdown_func, df_detalle = None, None, None
+                
                 st.subheader("💰 Cost Summary")
                 
                 col_b1, col_b2 = st.columns([1, 3])
                 with col_b1:
-                    budget_pct = st.number_input("🎯 Set Target Budget %:", min_value=0.0, max_value=100.0, value=3.0, step=0.1, key="sal_bgt")
+                    budget_pct = st.number_input("🎯 Set Target Budget %:", min_value=0.0, max_value=100.0, value=3.0, step=0.1)
                 
                 adj_pct = pd.to_numeric(df_filtered.get('%Adjustment', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
                 promo_pct = pd.to_numeric(df_filtered.get('%Growth Promotion', pd.Series(0, index=df_filtered.index)), errors='coerce').fillna(0)
@@ -298,8 +309,7 @@ if file1 is not None and file2 is not None:
                     "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
                 })
                 
-                summary_html = f"""
-                <table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
+                summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;">
                   <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                     <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Adj Cost</th>
                     <th style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">Promo Cost</th>
@@ -316,10 +326,10 @@ if file1 is not None and file2 is not None:
                     <td style="padding: 10px; border: 1px solid #e0e0e0; font-size: 16px;">{status_html}</td>
                     <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight:bold;">{pct_incremento:,.2f}%</td>
                   </tr>
-                </table>
-                """
+                </table>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
+                # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
                 
@@ -349,24 +359,37 @@ if file1 is not None and file2 is not None:
                     return grp
                 
                 def color_salary_variance(row):
-                    if row['Variance'] > 0: return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
-                    else: return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                    if row['Variance'] > 0:
+                        return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                    else:
+                        return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
 
-                format_dict = {'Adj Cost': '${:,.2f}', 'Promo Cost': '${:,.2f}', 'Total Cost': '${:,.2f}', 'Budget': '${:,.2f}', 'Variance': '${:,.2f}', '% Incr': '{:.2f}%'}
+                format_dict = {
+                    'Adj Cost': '${:,.2f}',
+                    'Promo Cost': '${:,.2f}',
+                    'Total Cost': '${:,.2f}',
+                    'Budget': '${:,.2f}',
+                    'Variance': '${:,.2f}',
+                    '% Incr': '{:.2f}%'
+                }
                 
                 with tab_org:
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
                         st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Reporting Organization column not found.")
                         
                 with tab_func:
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
                         st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Function column not found.")
 
                 st.markdown("---")
 
-                # PREPARE DATA FOR CHARTS
+                # --- PREPARE DATA FOR CHARTS ---
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -402,12 +425,21 @@ if file1 is not None and file2 is not None:
                             sizes = [num_movimientos, total_personas - num_movimientos]
                             labels = ['With Movement', 'No Movement']
                             colors = ['#ff9999', '#d3d3d3']
-                            wedges, texts, autotexts = ax1.pie(sizes, startangle=90, colors=colors, autopct=make_autopct(sizes), pctdistance=0.65, wedgeprops=dict(edgecolor='white', linewidth=1.5), textprops=dict(fontsize=10, fontweight='bold', color='#333333'))
+                            
+                            wedges, texts, autotexts = ax1.pie(
+                                sizes, startangle=90, colors=colors, 
+                                autopct=make_autopct(sizes), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
                             leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                             ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                        
                         ax1.axis('equal') 
                         ax1.set_title('Overall Movement', fontweight='bold', pad=15)
-                        st.pyplot(fig1)
+                    else:
+                        ax1.text(0.5, 0.5, "No data", ha='center', va='center')
+                    st.pyplot(fig1)
                     plt.close(fig1)
 
                 with col2:
@@ -415,18 +447,26 @@ if file1 is not None and file2 is not None:
                     raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                     raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
                     raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
+                    
                     sizes2 = [s for s in raw_sizes2 if s > 0]
                     labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
                     colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
                     total_chart2 = sum(sizes2)
                     
                     if total_chart2 > 0:
-                        wedges2, texts2, autotexts2 = ax2.pie(sizes2, startangle=90, colors=colors2, autopct=make_autopct(sizes2), pctdistance=0.65, wedgeprops=dict(edgecolor='white', linewidth=1.5), textprops=dict(fontsize=10, fontweight='bold', color='#333333'))
+                        wedges2, texts2, autotexts2 = ax2.pie(
+                            sizes2, startangle=90, colors=colors2,
+                            autopct=make_autopct(sizes2), pctdistance=0.65,
+                            wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                            textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                        )
                         leyenda2 = [f"{l} - {s} ({s/total_chart2*100:.1f}%)" for l, s in zip(labels2, sizes2)]
                         ax2.legend(wedges2, leyenda2, title="Breakdown", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                         ax2.axis('equal')
                         ax2.set_title('Movement Details', fontweight='bold', pad=15)
-                        st.pyplot(fig2)
+                    else:
+                        ax2.text(0.5, 0.5, "No data", ha='center', va='center')
+                    st.pyplot(fig2)
                     plt.close(fig2)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -435,34 +475,58 @@ if file1 is not None and file2 is not None:
                 with col3:
                     fig3, ax3 = plt.subplots(figsize=(7, 6))
                     df_adj = df_filtered[cond_adj].copy()
+                    
                     if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
                         df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned').replace({'None Selected': 'No Reason Assigned'})
                         reason_counts = df_adj['Adjustment Reason'].value_counts()
                         total_reasons = reason_counts.sum()
+                        
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                            wedges3, texts3, autotexts3 = ax3.pie(reason_counts.values, startangle=90, colors=colores_motivos, autopct=make_autopct(reason_counts.values), pctdistance=0.65, wedgeprops=dict(edgecolor='white', linewidth=1.5), textprops=dict(fontsize=10, fontweight='bold', color='#333333'))
+                            
+                            wedges3, texts3, autotexts3 = ax3.pie(
+                                reason_counts.values, startangle=90, colors=colores_motivos,
+                                autopct=make_autopct(reason_counts.values), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
                             leyenda3 = [f"{i} - {v} ({v/total_reasons*100:.1f}%)" for i, v in reason_counts.items()]
                             ax3.legend(wedges3, leyenda3, title="Reasons", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax3.axis('equal')
                             ax3.set_title('Adjustment Split (Reason)', fontweight='bold', pad=15)
-                            st.pyplot(fig3)
+                        else:
+                            ax3.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                    else:
+                        ax3.text(0.5, 0.5, "No adjustments to analyze", ha='center', va='center')
+                    st.pyplot(fig3)
                     plt.close(fig3)
 
                 with col4:
                     fig4, ax4 = plt.subplots(figsize=(7, 6))
                     df_pot_mov = df_filtered[tiene_movimiento].copy()
+                    
                     if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
                         pot_counts = df_pot_mov['Potential'].value_counts()
                         total_pot = pot_counts.sum()
+                        
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
-                            wedges4, texts4, autotexts4 = ax4.pie(pot_counts.values, startangle=90, colors=colores_pot, autopct=make_autopct(pot_counts.values), pctdistance=0.65, wedgeprops=dict(edgecolor='white', linewidth=1.5), textprops=dict(fontsize=10, fontweight='bold', color='#333333'))
+                            
+                            wedges4, texts4, autotexts4 = ax4.pie(
+                                pot_counts.values, startangle=90, colors=colores_pot,
+                                autopct=make_autopct(pot_counts.values), pctdistance=0.65,
+                                wedgeprops=dict(edgecolor='white', linewidth=1.5),
+                                textprops=dict(fontsize=10, fontweight='bold', color='#333333')
+                            )
                             leyenda4 = [f"{i} - {v} ({v/total_pot*100:.1f}%)" for i, v in pot_counts.items()]
                             ax4.legend(wedges4, leyenda4, title="Potential Rating", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                             ax4.axis('equal')
                             ax4.set_title('Movements by Potential Split', fontweight='bold', pad=15)
-                            st.pyplot(fig4)
+                        else:
+                            ax4.text(0.5, 0.5, "No valid data", ha='center', va='center')
+                    else:
+                        ax4.text(0.5, 0.5, "No movements", ha='center', va='center')
+                    st.pyplot(fig4)
                     plt.close(fig4)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -473,9 +537,11 @@ if file1 is not None and file2 is not None:
                     if not df_filtered.empty and 'Current Quartile' in df_filtered.columns and 'New Quartile' in df_filtered.columns:
                         counts_curr = df_filtered['Current Quartile'].value_counts()
                         counts_new = df_filtered['New Quartile'].value_counts()
+                        
                         final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
                         val_curr = [counts_curr.get(c, 0) for c in final_order]
                         val_new = [counts_new.get(c, 0) for c in final_order]
+                        
                         x_pos = np.arange(len(final_order))
                         ancho_barra = 0.35
                         
@@ -500,28 +566,38 @@ if file1 is not None and file2 is not None:
                         ax5.spines['right'].set_visible(False)
                         ax5.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=10)
                         fig5.tight_layout()
-                        st.pyplot(fig5)
+                    else:
+                        ax5.text(0.5, 0.5, "Quartile Columns missing", ha='center', va='center')
+                    st.pyplot(fig5)
                     plt.close(fig5)
 
                 with col6:
                     fig6, ax6 = plt.subplots(figsize=(7, 6))
                     df_gender_mov = df_filtered[tiene_movimiento].copy()
+                    
                     if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
                         gender_counts = df_gender_mov['Gender'].value_counts()
                         total_gender = gender_counts.sum()
+                        
                         if total_gender > 0:
                             colores_gender = sns.color_palette("pastel", len(gender_counts))
                             bars = ax6.bar(gender_counts.index, gender_counts.values, color=colores_gender)
                             for bar in bars:
                                 yval = bar.get_height()
                                 pct = (yval / total_gender) * 100
-                                ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                                ax6.text(bar.get_x() + bar.get_width()/2, yval + (total_gender * 0.01), 
+                                         f'{int(yval)}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                                
                             ax6.set_title('Movements by Gender Split', fontweight='bold', pad=15)
                             ax6.set_ylabel('Employees')
                             ax6.spines['top'].set_visible(False)
                             ax6.spines['right'].set_visible(False)
                             fig6.tight_layout()
-                            st.pyplot(fig6)
+                        else:
+                            ax6.text(0.5, 0.5, "No data", ha='center', va='center')
+                    else:
+                        ax6.text(0.5, 0.5, "No Gender data", ha='center', va='center')
+                    st.pyplot(fig6)
                     plt.close(fig6)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -548,6 +624,7 @@ if file1 is not None and file2 is not None:
                     
                     fig_new, ax_new = plt.subplots(figsize=(10, 5))
                     bars = pivot_df.plot(kind='bar', ax=ax_new, stacked=False, colormap='viridis', width=0.8)
+                    
                     for container in ax_new.containers:
                         labels = [f'{int(v)}' if v > 0 else '' for v in container.datavalues]
                         ax_new.bar_label(container, labels=labels, padding=3, fontsize=9, color='#333333')
@@ -555,26 +632,57 @@ if file1 is not None and file2 is not None:
                     ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
                     ax_new.set_ylabel("Number of Employees")
                     ax_new.set_xlabel("Years in Subgroup")
+                    
                     ax_new.spines['top'].set_visible(False)
                     ax_new.spines['right'].set_visible(False)
+                    
                     max_y = pivot_df.values.max() if not pivot_df.empty else 1
                     ax_new.set_ylim(0, max_y * 1.15)
+                    
                     plt.xticks(rotation=0)
                     ax_new.legend(title="New Quartile", bbox_to_anchor=(1.05, 1), loc='upper left')
                     fig_new.tight_layout()
+                    
                     st.pyplot(fig_new)
                     plt.close(fig_new)
+                else:
+                    st.info("No data found for 'High Potential' or 'Strategic Few' in the current filter.")
                 
                 st.markdown("---")
+
+                # --- DYNAMIC STAFF TABLE ---
                 st.subheader("👥 Employee Detailed List & Alerts")
                 
                 col_filt1, col_filt2, col_filt3 = st.columns(3)
+                
                 with col_filt1:
-                    opcion_detalle = st.radio("1. Filter by Movement Type:", ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"], horizontal=True, key='sal_rad')
+                    opcion_detalle = st.radio(
+                        "1. Filter by Movement Type:",
+                        ["All Employees", "Adjustment Only", "Promotion Only", "Both", "No Movement"],
+                        horizontal=True,
+                        key='rad_mov'
+                    )
+                    
                 with col_filt2:
-                    opcion_alerta = st.selectbox("2. Filter by Alerts (Colors):", ["Show All", "⚠️ Show Only with Alerts (Any Color)", "🔴 Red Alerts Only (Critical)", "🟠 Orange Alerts Only (Warning)", "🟡 Yellow Alerts Only (Notice)"], key='sal_alerta')
+                    opcion_alerta = st.selectbox(
+                        "2. Filter by Alerts (Colors):",
+                        [
+                            "Show All", 
+                            "⚠️ Show Only with Alerts (Any Color)", 
+                            "🔴 Red Alerts Only (Critical)", 
+                            "🟠 Orange Alerts Only (Warning)", 
+                            "🟡 Yellow Alerts Only (Notice)"
+                        ],
+                        key='sel_alert'
+                    )
+                    
                 with col_filt3:
-                    search_emp = st.text_input("3. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='sal_search')
+                    search_emp = st.text_input(
+                        "3. Search Employee (Exact ID or Name):", 
+                        "", 
+                        placeholder="Type Name or Exact Global ID...", 
+                        key='search_salary'
+                    )
 
                 col_filt4, col_filt5 = st.columns(2)
                 
@@ -586,12 +694,13 @@ if file1 is not None and file2 is not None:
                     
                 with col_filt4:
                     opts_years = sorted(df_filtered['Years in SG'].unique().tolist(), key=sort_years_opts)
-                    selected_years = st.multiselect("4. Filter by Years in SG:", options=opts_years, default=[], key="sal_years")
+                    selected_years = st.multiselect("4. Filter by Years in SG:", options=opts_years, default=[])
+                    
                 with col_filt5:
                     base_qrtles = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max", "Unknown"]
                     opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].unique().tolist()]
                     opts_qrtle += [q for q in df_filtered['New Quartile'].unique().tolist() if q not in opts_qrtle]
-                    selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[], key="sal_qrtle")
+                    selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[])
 
                 if opcion_detalle == "Adjustment Only": mask = solo_adj
                 elif opcion_detalle == "Promotion Only": mask = solo_promo
@@ -602,8 +711,10 @@ if file1 is not None and file2 is not None:
                 df_detalle = df_filtered[mask].copy()
                 df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
                 
-                if selected_years: df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
-                if selected_qrtle: df_detalle = df_detalle[df_detalle['New Quartile'].isin(selected_qrtle)]
+                if selected_years:
+                    df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
+                if selected_qrtle:
+                    df_detalle = df_detalle[df_detalle['New Quartile'].isin(selected_qrtle)]
 
                 def evaluar_alertas(row):
                     comentarios = []
@@ -619,6 +730,10 @@ if file1 is not None and file2 is not None:
                         val_ak = get_num(row.iloc[36])
                         val_al_raw = str(row.iloc[37]).strip().lower()
                         al_vacio = val_al_raw in ['', 'nan', 'nat', 'none', 'null']
+                        
+                        flag_rojo = False
+                        flag_naranja = False
+                        flag_amarillo = False
                         
                         if pd.notna(val_z):
                             delta_dias = abs((FECHA_ACTUAL - val_z).days)
@@ -649,10 +764,14 @@ if file1 is not None and file2 is not None:
                     df_detalle['ALERT_COMMENTS'] = [x[0] for x in alertas_lista]
                     df_detalle['RowColor'] = [x[1] for x in alertas_lista]
                     
-                    if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)": df_detalle = df_detalle[df_detalle['RowColor'] != '']
-                    elif opcion_alerta == "🔴 Red Alerts Only (Critical)": df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
-                    elif opcion_alerta == "🟠 Orange Alerts Only (Warning)": df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
-                    elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)": df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
+                    if opcion_alerta == "⚠️ Show Only with Alerts (Any Color)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] != '']
+                    elif opcion_alerta == "🔴 Red Alerts Only (Critical)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffcccc']
+                    elif opcion_alerta == "🟠 Orange Alerts Only (Warning)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffe4b5']
+                    elif opcion_alerta == "🟡 Yellow Alerts Only (Notice)":
+                        df_detalle = df_detalle[df_detalle['RowColor'] == '#ffffcc']
                     
                     if search_emp.strip() and not df_detalle.empty:
                         term = search_emp.strip()
@@ -661,7 +780,8 @@ if file1 is not None and file2 is not None:
                             df_detalle = df_detalle[mask_exact]
                         else:
                             name_cols = [c for c in df_detalle.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
-                            if not name_cols: name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                            if not name_cols:
+                                name_cols = [c for c in df_detalle.columns if 'name' in c.lower() and 'manager' not in c.lower()]
                             if name_cols:
                                 mask_search = np.column_stack([df_detalle[col].astype(str).str.contains(term, case=False, na=False) for col in name_cols]).any(axis=1)
                                 df_detalle = df_detalle[mask_search]
@@ -704,13 +824,17 @@ if file1 is not None and file2 is not None:
                 st.subheader("🎯 Bonus IO Planning")
                 
                 col_rating = None
+                
                 for c in df_filtered.columns:
                     cl = str(c).lower().strip()
                     if 'rating' in cl or 'performance' in cl or 'impact' in cl:
                         if not col_rating: col_rating = c
-                if not col_rating: col_rating = 'Potential' 
+                        
+                if not col_rating:
+                    col_rating = 'Potential' 
                 
                 col_proposed_io = df_filtered.columns[13] if len(df_filtered.columns) > 13 else None
+                
                 total_ees = len(df_filtered)
                 
                 categories = [
@@ -732,6 +856,7 @@ if file1 is not None and file2 is not None:
                         col_bonus_proposed_val = c
                 
                 df_bonus_full = df_filtered.copy()
+                
                 if col_bonus_target and col_bonus_proposed_val:
                     df_bonus_full['Calculated_IO_Pct'] = np.where(
                         pd.to_numeric(df_bonus_full[col_bonus_target], errors='coerce').fillna(0) > 0,
@@ -753,8 +878,9 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '', regex=False).str.replace(',', '', regex=False).str.strip()
+                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '').str.replace(',', '').str.strip()
                         vals = pd.to_numeric(clean_vals, errors='coerce').dropna()
+                        
                         if not vals.empty:
                             avg_io = vals.mean()
                             if 0 < avg_io <= 10: avg_io = avg_io * 100
@@ -778,35 +904,10 @@ if file1 is not None and file2 is not None:
                 
                 html_rows = ""
                 for d in table_data:
-                    html_rows += "<tr>"
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td>'
-                    html_rows += "</tr>"
+                    html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
                 
-                html_table = f"""
-                <div style="max-width: 900px; margin-bottom: 40px;">
-                <table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;">
-                  <tr style="background-color: #0F253F; color: white;">
-                    <th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th>
-                    <th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th>
-                  </tr>
-                  {html_rows}
-                  <tr style="background-color: white;">
-                    <td style="padding: 10px; border: none; text-align:left;"></td>
-                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td>
-                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td>
-                    <td style="padding: 10px; border: none;"></td>
-                    <td style="padding: 10px; border: none;"></td>
-                  </tr>
-                </table>
-                </div>
-                """
+                html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
+                
                 st.markdown(html_table, unsafe_allow_html=True)
                 
                 fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
@@ -814,21 +915,19 @@ if file1 is not None and file2 is not None:
                 y_vals = [d['avg_io'] for d in table_data]
                 
                 bars_b = ax_bon.bar(x_labels, y_vals, width=0.5, color='#5a84f1')
+                
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
+                ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
                 
-                def format_fn(tick_val, tick_pos):
-                    if pd.isna(tick_val): return '0%'
-                    return f'{int(tick_val)}%'
-                
-                ax_bon.yaxis.set_major_formatter(ticker.FuncFormatter(format_fn))
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
                 for bar in bars_b:
                     yval = bar.get_height()
                     if yval > 0:
-                        ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', ha='center', va='top', color='white', fontweight='bold', fontsize=11)
+                        ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', 
+                                  ha='center', va='top', color='white', fontweight='bold', fontsize=11)
                 
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
@@ -844,7 +943,7 @@ if file1 is not None and file2 is not None:
                 st.markdown("### 👥 Bonus Eligible Employees List")
                 
                 rating_options = sorted(df_bonus_full[col_rating].dropna().astype(str).unique().tolist())
-                selected_ratings = st.multiselect("1. Filter by Performance Rating:", options=rating_options, default=[], key="bon_rat_fil")
+                selected_ratings = st.multiselect("1. Filter by Performance Rating:", options=rating_options, default=[])
                 
                 df_bonus_table = df_bonus_full.copy()
                 if selected_ratings:
@@ -937,7 +1036,9 @@ if file1 is not None and file2 is not None:
                                 leyenda_eq = [f"{l} - {s}" for l, s in zip(pie_labels, pie_sizes)]
                                 ax_eq.legend(wedges_eq, leyenda_eq, title="Distribution", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
                                 ax_eq.axis('equal')
-                                st.pyplot(fig_eq)
+                            else:
+                                ax_eq.text(0.5, 0.5, "No data available", ha='center', va='center')
+                            st.pyplot(fig_eq)
                             plt.close(fig_eq)
                         
                         with col_summary:
@@ -956,6 +1057,7 @@ if file1 is not None and file2 is not None:
                             else:
                                 status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
                                 
+                            st.markdown("##### Total Equity Budget Summary")
                             summary_html = f"""<table style="width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px;">
                               <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
                                 <th style="padding: 12px; border: 1px solid #e0e0e0; color: #333;">Equity Budget (Total BL)</th>
@@ -987,20 +1089,30 @@ if file1 is not None and file2 is not None:
                             return grp
 
                         def color_variance_row(row):
-                            if row['Variance'] > 0: return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
-                            else: return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                            if row['Variance'] > 0:
+                                return ['color: red; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
+                            else:
+                                return ['color: green; font-weight: bold' if col in ['Variance', 'Status'] else '' for col in row.index]
                                 
-                        format_dict_eq = {'Budget': '${:,.2f}', 'Proposed': '${:,.2f}', 'Variance': '${:,.2f}'}
+                        format_dict_eq = {
+                            'Budget': '${:,.2f}',
+                            'Proposed': '${:,.2f}',
+                            'Variance': '${:,.2f}'
+                        }
 
                         with tab_eq_org:
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
                                 st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Reporting Organization column not found.")
                                 
                         with tab_eq_func:
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
                                 st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Function column not found.")
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1009,9 +1121,9 @@ if file1 is not None and file2 is not None:
                         opciones_conceptos = ["0%", "Below 100%", "On Midpoint 100%", "Above Midpoint", "Above Midpoint w/o Comments"]
                         
                         with col_eq_filt1:
-                            seleccion_conceptos = st.multiselect("1. Select Categories to display:", options=opciones_conceptos, default=[], key="eq_cat")
+                            seleccion_conceptos = st.multiselect("1. Select Categories to display:", options=opciones_conceptos, default=[])
                         with col_eq_filt2:
-                            search_eq = st.text_input("2. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='eq_search')
+                            search_eq = st.text_input("2. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='search_equity')
 
                         def clasificar_bn(row):
                             val_bn = row.iloc[col_bn_idx]
@@ -1031,8 +1143,10 @@ if file1 is not None and file2 is not None:
 
                         df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        if seleccion_conceptos: df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
-                        else: df_equity_filtered = df_equity_full.iloc[0:0] 
+                        if seleccion_conceptos:
+                            df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
+                        else:
+                            df_equity_filtered = df_equity_full.iloc[0:0] 
                             
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
@@ -1042,6 +1156,7 @@ if file1 is not None and file2 is not None:
                             else:
                                 name_cols_eq = [c for c in df_equity_filtered.columns if c.strip().lower() in ['name', 'employee name', 'full name', 'first name', 'last name']]
                                 if not name_cols_eq: name_cols_eq = [c for c in df_equity_filtered.columns if 'name' in c.lower() and 'manager' not in c.lower()]
+                                
                                 if name_cols_eq:
                                     mask_search_eq = np.column_stack([df_equity_filtered[col].astype(str).str.contains(term_eq, case=False, na=False) for col in name_cols_eq]).any(axis=1)
                                     df_equity_filtered = df_equity_filtered[mask_search_eq]
@@ -1056,8 +1171,10 @@ if file1 is not None and file2 is not None:
                                 df_equity_filtered = df_equity_filtered[cols_eq]
 
                             categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
+                            
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
+                            
                             cols_fijas_eq = list(df_visual_eq.columns[:4])
                             df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
@@ -1108,10 +1225,17 @@ if file1 is not None and file2 is not None:
             st.sidebar.info("Download a complete Excel report with all summaries, breakdowns, and employee details matching your active filters.")
             
             output = io.BytesIO()
-            try: writer = pd.ExcelWriter(output, engine='openpyxl')
-            except Exception: writer = pd.ExcelWriter(output)
+            
+            try:
+                writer = pd.ExcelWriter(output, engine='xlsxwriter')
+            except ImportError:
+                try:
+                    writer = pd.ExcelWriter(output, engine='openpyxl')
+                except ImportError:
+                    writer = pd.ExcelWriter(output)
                     
             with writer:
+                # Escribimos hojas de Salary
                 if sal_data:
                     cost_df, df_breakdown_org, df_breakdown_func, df_detalle = sal_data
                     if cost_df is not None: cost_df.to_excel(writer, sheet_name='Salary Summary', index=False)
@@ -1123,6 +1247,7 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
+                # Escribimos hojas de Bonus
                 if 'bon_data' in locals() and bon_data:
                     bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
                     if bon_summary_df is not None and not bon_summary_df.empty: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
@@ -1134,6 +1259,7 @@ if file1 is not None and file2 is not None:
                         df_bon_excel = df_bon_excel.drop(columns=[c for c in cols_e if c in df_bon_excel.columns])
                         df_bon_excel.to_excel(writer, sheet_name='Bonus Details', index=False)
                         
+                # Escribimos hojas de Equity
                 if eq_data:
                     eq_summary_df, eq_brk_org, eq_brk_func, df_eq_filtered = eq_data
                     if eq_summary_df is not None: eq_summary_df.to_excel(writer, sheet_name='Equity Summary', index=False)
@@ -1151,8 +1277,7 @@ if file1 is not None and file2 is not None:
                 label="📊 Download Full Excel Report",
                 data=excel_data,
                 file_name="Dashboard_Final_Report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_btn"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     except Exception as e:
