@@ -373,12 +373,12 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
 
                 st.markdown("---")
 
@@ -699,7 +699,6 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
                         df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
                         
@@ -709,7 +708,7 @@ if file1 is not None and file2 is not None:
                             return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado)
+                        st.dataframe(df_estilizado, width='stretch')
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -731,7 +730,16 @@ if file1 is not None and file2 is not None:
                         if not col_rating: col_rating = c
                 if not col_rating: col_rating = 'Potential' 
                 
-                col_proposed_io = df_filtered.columns[13] if len(df_filtered.columns) > 13 else None
+                # --- FIX: BÚSQUEDA DINÁMICA DE LA COLUMNA DE BONO PROPUESTO PARA EVITAR CRASH DE MATPLOTLIB ---
+                col_proposed_io = None
+                for c in df_filtered.columns:
+                    cl = str(c).lower()
+                    if 'proposed' in cl and ('io' in cl or '%' in cl):
+                        col_proposed_io = c
+                        break
+                if not col_proposed_io and len(df_filtered.columns) > 13:
+                    col_proposed_io = df_filtered.columns[13]
+                    
                 total_ees = len(df_filtered)
                 
                 categories = [
@@ -849,8 +857,10 @@ if file1 is not None and file2 is not None:
                 
                 for bar in bars_b:
                     yval = bar.get_height()
-                    if yval > 0:
-                        ax_bon.text(bar.get_x() + bar.get_width()/2, yval - 12, f'{int(yval)}%', ha='center', va='top', color='white', fontweight='bold', fontsize=11)
+                    if pd.notna(yval) and yval > 0:
+                        # --- FIX: TOPE FÍSICO AL TEXTO PARA EVITAR QUE MATPLOTLIB CREA IMÁGENES DE 21 MILLONES DE PÍXELES ---
+                        plot_y = yval if yval <= 200 else 190
+                        ax_bon.text(bar.get_x() + bar.get_width()/2, plot_y - 12, f'{int(yval)}%', ha='center', va='top', color='white', fontweight='bold', fontsize=11)
                 
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
@@ -895,7 +905,7 @@ if file1 is not None and file2 is not None:
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
                     df_bonus_show = df_bonus_table[cols_to_show].astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
-                    st.dataframe(df_bonus_show)
+                    st.dataframe(df_bonus_show, width='stretch')
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -1021,13 +1031,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1098,7 +1108,7 @@ if file1 is not None and file2 is not None:
                                 return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled)
+                            st.dataframe(df_eq_styled, width='stretch')
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
