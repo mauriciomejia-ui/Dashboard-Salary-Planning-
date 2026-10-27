@@ -8,6 +8,7 @@ import os
 import numpy as np
 import io
 import PIL.Image
+import traceback
 
 # Desactivar límite de píxeles por si alguna librería intenta procesar artefactos visuales corruptos de Excel
 PIL.Image.MAX_IMAGE_PIXELS = None
@@ -126,6 +127,7 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
+        # Convertir a texto estricto antes de extraer valores únicos para evitar el error '< not supported between float and str'
         gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist()) if 'Chief Name' in df.columns else []
         org_options = sorted(df['Reporting Organization'].astype(str).unique().tolist()) if 'Reporting Organization' in df.columns else []
         func_options = sorted(df['Function'].astype(str).unique().tolist()) if 'Function' in df.columns else []
@@ -194,12 +196,12 @@ if file1 is not None and file2 is not None:
         filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
         mask_all = pd.Series(True, index=df.index)
-        if 'Chief Name' in df.columns: mask_all = mask_all & (df['Chief Name'].isin(filtros_finales_gerentes))
-        if 'Reporting Organization' in df.columns: mask_all = mask_all & (df['Reporting Organization'].isin(filtros_finales_orgs))
-        if 'Function' in df.columns: mask_all = mask_all & (df['Function'].isin(filtros_finales_funcs))
-        if 'Compensation Area' in df.columns: mask_all = mask_all & (df['Compensation Area'].isin(filtros_finales_comps))
-        if 'Employee Subgroup' in df.columns: mask_all = mask_all & (df['Employee Subgroup'].isin(filtros_finales_subgroups))
-        if 'Potential' in df.columns: mask_all = mask_all & (df['Potential'].isin(filtros_finales_potentials))
+        if 'Chief Name' in df.columns: mask_all = mask_all & (df['Chief Name'].astype(str).isin(filtros_finales_gerentes))
+        if 'Reporting Organization' in df.columns: mask_all = mask_all & (df['Reporting Organization'].astype(str).isin(filtros_finales_orgs))
+        if 'Function' in df.columns: mask_all = mask_all & (df['Function'].astype(str).isin(filtros_finales_funcs))
+        if 'Compensation Area' in df.columns: mask_all = mask_all & (df['Compensation Area'].astype(str).isin(filtros_finales_comps))
+        if 'Employee Subgroup' in df.columns: mask_all = mask_all & (df['Employee Subgroup'].astype(str).isin(filtros_finales_subgroups))
+        if 'Potential' in df.columns: mask_all = mask_all & (df['Potential'].astype(str).isin(filtros_finales_potentials))
 
         df_filtered = df[mask_all].copy()
         
@@ -371,12 +373,12 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1))
 
                 st.markdown("---")
 
@@ -697,7 +699,6 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
                         df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
                         
@@ -707,7 +708,7 @@ if file1 is not None and file2 is not None:
                             return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado, width='stretch')
+                        st.dataframe(df_estilizado)
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -893,7 +894,7 @@ if file1 is not None and file2 is not None:
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
                     df_bonus_show = df_bonus_table[cols_to_show].astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
-                    st.dataframe(df_bonus_show, width='stretch')
+                    st.dataframe(df_bonus_show)
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -1019,13 +1020,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1))
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1))
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1084,7 +1085,6 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
-                            # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
                             df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                             
                             def color_equity_totales(df_vista):
@@ -1097,7 +1097,7 @@ if file1 is not None and file2 is not None:
                                 return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled, width='stretch')
+                            st.dataframe(df_eq_styled)
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
@@ -1182,6 +1182,8 @@ if file1 is not None and file2 is not None:
             )
 
     except Exception as e:
-        st.error(f"An error occurred while processing the files: {e}")
+        # Mostramos también el traceback completo por si queda algún otro error oculto
+        st.error(f"An error occurred: {e}")
+        st.code(traceback.format_exc(), language="python")
 else:
     st.info("Please upload both files (Main and SuperFlex) to begin.")
