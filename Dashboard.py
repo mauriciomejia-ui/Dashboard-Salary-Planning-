@@ -1062,7 +1062,8 @@ if file1 is not None and file2 is not None:
                         opciones_conceptos = ["0%", "Below 100%", "On Midpoint 100%", "Above Midpoint", "Above Midpoint w/o Comments"]
                         
                         with col_eq_filt1:
-                            seleccion_conceptos = st.multiselect("1. Select Categories to display:", options=opciones_conceptos, default=[], key="eq_cat")
+                            # FIX: Mostrar todo el personal con "YES" por defecto cambiando la instrucción del filtro
+                            seleccion_conceptos = st.multiselect("1. Filter by Alert Categories (Leave empty to show all):", options=opciones_conceptos, default=[], key="eq_cat")
                         with col_eq_filt2:
                             search_eq = st.text_input("2. Search Employee (Exact ID or Name):", "", placeholder="Type Name or Exact Global ID...", key='eq_search')
 
@@ -1084,8 +1085,11 @@ if file1 is not None and file2 is not None:
 
                         df_equity_full['ALERT_CATEGORY'] = df_equity_full.apply(clasificar_bn, axis=1)
                         
-                        if seleccion_conceptos: df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
-                        else: df_equity_filtered = df_equity_full.iloc[0:0] 
+                        # FIX: Si está vacío, copiamos el DataFrame completo que ya está filtrado por BJ == 'Yes'
+                        if seleccion_conceptos: 
+                            df_equity_filtered = df_equity_full[df_equity_full['ALERT_CATEGORY'].isin(seleccion_conceptos)]
+                        else: 
+                            df_equity_filtered = df_equity_full.copy()
                             
                         if search_eq.strip() and not df_equity_filtered.empty:
                             term_eq = search_eq.strip()
@@ -1122,7 +1126,6 @@ if file1 is not None and file2 is not None:
                             eq_c_mid = get_eq_col(['midpoint of stock', 'stock mid', 'mid stock', 'midpoint'])
                             eq_c_max = get_eq_col(['maximum of stock', 'stock max', 'max stock', 'maximum'])
                             
-                            # FIX: Asignar directamente la columna BN (índice 65) sin usar palabras clave
                             eq_c_prop = df_equity_filtered.columns[col_bn_idx] if len(df_equity_filtered.columns) > col_bn_idx else None
                             
                             eq_c_watch = get_eq_col(['watch out', 'recommendation watch out', 'reccomendation watch out'])
@@ -1137,7 +1140,6 @@ if file1 is not None and file2 is not None:
 
                             df_visual_eq = df_equity_filtered[final_cols].copy()
                             
-                            # FIX: Renombrar para asegurar que diga "Proposed Recommendation (%)"
                             if eq_c_prop in df_visual_eq.columns:
                                 df_visual_eq = df_visual_eq.rename(columns={eq_c_prop: "Proposed Recommendation (%)"})
                                 
@@ -1157,8 +1159,7 @@ if file1 is not None and file2 is not None:
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
                             st.dataframe(df_eq_styled, width='stretch')
                         else:
-                            if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
-                            else: st.info("Select one or more categories above to view employee details in this table.")
+                            st.info("No employees match your search term or selected categories.")
                     else:
                         st.warning("No employees in the current filtered selection have 'Yes' in Stock Eligibility (Column BJ).")
                 else:
