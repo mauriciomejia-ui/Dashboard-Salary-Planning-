@@ -9,7 +9,7 @@ import numpy as np
 import io
 import PIL.Image
 
-# Desactivar límite de píxeles por si alguna librería intenta procesar artefactos de Excel
+# Desactivar límite de píxeles por si alguna librería intenta procesar artefactos visuales corruptos de Excel
 PIL.Image.MAX_IMAGE_PIXELS = None
 
 # ¡Esta línea debe ser la primera de Streamlit!
@@ -66,24 +66,27 @@ if file1 is not None and file2 is not None:
         df1 = pd.read_excel(file1, sheet_name="Salary", engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         df2 = pd.read_excel(file2, header=2, engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         
-        # BLINDAJE 1: Convertir todas las cabeceras a texto para evitar colapso de PyArrow
+        # BLINDAJE 1: Convertir todas las cabeceras a texto para evitar colapso
         df1.columns = df1.columns.astype(str)
         df2.columns = df2.columns.astype(str)
         
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
+        # Evitar duplicados de ID en SuperFlex para no corromper el cruce
+        df2_sub = df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']].drop_duplicates(subset=['Global ID'])
+        
         if len(df2.columns) > 28:
-            df2['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
+            df2_sub['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
         else:
-            df2['Employee Subgroup'] = "N/A"
+            df2_sub['Employee Subgroup'] = "N/A"
             
         if len(df2.columns) > 47:
-            df2['Gender'] = df2.iloc[:, 47].astype(str)
+            df2_sub['Gender'] = df2.iloc[:, 47].astype(str)
         else:
-            df2['Gender'] = "Unknown"
+            df2_sub['Gender'] = "Unknown"
         
-        df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
+        df = pd.merge(df1, df2_sub, on='Global ID', how='left')
         
         # Reasegurar nombres de columnas tras el merge
         df.columns = df.columns.astype(str)
@@ -361,6 +364,7 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
+                        # Eliminamos el parámetro de contenedor para evitar quejas del log
                         st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
                 with col_brk_2:
                     st.markdown("**By Function**")
@@ -686,10 +690,9 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        df_visual = df_visual.astype(str).reset_index(drop=True)
+                        # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
+                        df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
-                        cols_fijas = list(df_visual.columns[:4])
-                        df_visual = df_visual.set_index(cols_fijas)
                         
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
@@ -1073,9 +1076,8 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
-                            df_visual_eq = df_visual_eq.astype(str).reset_index(drop=True)
-                            cols_fijas_eq = list(df_visual_eq.columns[:4])
-                            df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
+                            # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
+                            df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
