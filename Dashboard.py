@@ -878,7 +878,7 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '').str.replace(',', '').str.strip()
+                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '', regex=False).str.replace(',', '', regex=False).str.strip()
                         vals = pd.to_numeric(clean_vals, errors='coerce').dropna()
                         
                         if not vals.empty:
@@ -918,7 +918,13 @@ if file1 is not None and file2 is not None:
                 
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
-                ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
+                
+                def format_fn(tick_val, tick_pos):
+                    if pd.isna(tick_val):
+                        return '0%'
+                    return f'{int(tick_val)}%'
+                
+                ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(format_fn))
                 
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
