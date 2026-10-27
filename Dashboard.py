@@ -2,16 +2,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import seaborn as sns
 import json
 import os
 import numpy as np
 import io
 
-# ¡ESTA LÍNEA DEBE SER OBLIGATORIAMENTE LA PRIMERA!
+# ¡ESTA LÍNEA DEBE SER OBLIGATORIAMENTE LA PRIMERA DE STREAMLIT!
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
 
-# Limpieza de memoria gráfica (ahora en el lugar correcto)
+# Limpieza de memoria gráfica
 plt.close('all')
 
 st.title("Salary Planning Dashboard")
@@ -228,16 +229,15 @@ if file1 is not None and file2 is not None:
         else:
             df_filtered['New Quartile'] = "Unknown"
 
-
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
             # ==========================================
-            # SECCIÓN DE EXPORTACIÓN Y PDF (SIDEBAR)
+            # SECCIÓN DE EXPORTACIÓN A PDF (SIDEBAR)
             # ==========================================
             st.sidebar.markdown("---")
             st.sidebar.subheader("📄 Export Report")
-            pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)", key="pdf_mode")
+            pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)", key="pdf_mode_check")
             
             if pdf_mode:
                 st.markdown("""
@@ -255,19 +255,7 @@ if file1 is not None and file2 is not None:
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                
-                components.html(
-                    """
-                    <script>
-                    function printDashboard() { window.parent.print(); }
-                    </script>
-                    <button onclick="printDashboard()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: sans-serif;">
-                        🖨️ Save Dashboard as PDF
-                    </button>
-                    """,
-                    height=50
-                )
-                st.sidebar.info("Tip: In the print dialog, select 'Save as PDF', enable 'Background Graphics', and hide Headers/Footers.")
+                st.sidebar.success("✅ PDF mode active. Press **Ctrl + P** (or Cmd + P) in your browser and select 'Save as PDF'. Ensure 'Background graphics' is enabled.")
 
             # ==========================================
             #           FUNCIÓN: SALARY PLANNING
@@ -632,10 +620,6 @@ if file1 is not None and file2 is not None:
                         val_al_raw = str(row.iloc[37]).strip().lower()
                         al_vacio = val_al_raw in ['', 'nan', 'nat', 'none', 'null']
                         
-                        flag_rojo = False
-                        flag_naranja = False
-                        flag_amarillo = False
-                        
                         if pd.notna(val_z):
                             delta_dias = abs((FECHA_ACTUAL - val_z).days)
                             if (0.01 < val_af < 1) and (val_ab > 0 or val_ac > 0) and delta_dias <= 182:
@@ -837,7 +821,7 @@ if file1 is not None and file2 is not None:
                     if pd.isna(tick_val): return '0%'
                     return f'{int(tick_val)}%'
                 
-                ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(format_fn))
+                ax_bon.yaxis.set_major_formatter(ticker.FuncFormatter(format_fn))
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
