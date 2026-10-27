@@ -127,13 +127,13 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        # Convertir a texto estricto antes de extraer valores únicos para evitar el error '< not supported between float and str'
-        gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist()) if 'Chief Name' in df.columns else []
-        org_options = sorted(df['Reporting Organization'].astype(str).unique().tolist()) if 'Reporting Organization' in df.columns else []
-        func_options = sorted(df['Function'].astype(str).unique().tolist()) if 'Function' in df.columns else []
-        comp_options = sorted(df['Compensation Area'].astype(str).unique().tolist()) if 'Compensation Area' in df.columns else []
-        subgroup_options = sorted(df['Employee Subgroup'].astype(str).unique().tolist()) if 'Employee Subgroup' in df.columns else []
-        potential_options = sorted(df['Potential'].astype(str).unique().tolist()) if 'Potential' in df.columns else []
+        # FIX DEFINITIVO: Compresión de listas en Python puro para forzar string ANTES de ordenar
+        gerente_options = sorted([str(x) for x in df['Chief Name'].unique()]) if 'Chief Name' in df.columns else []
+        org_options = sorted([str(x) for x in df['Reporting Organization'].unique()]) if 'Reporting Organization' in df.columns else []
+        func_options = sorted([str(x) for x in df['Function'].unique()]) if 'Function' in df.columns else []
+        comp_options = sorted([str(x) for x in df['Compensation Area'].unique()]) if 'Compensation Area' in df.columns else []
+        subgroup_options = sorted([str(x) for x in df['Employee Subgroup'].unique()]) if 'Employee Subgroup' in df.columns else []
+        potential_options = sorted([str(x) for x in df['Potential'].unique()]) if 'Potential' in df.columns else []
 
         if filtro_elegido != "-- None --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
@@ -600,12 +600,12 @@ if file1 is not None and file2 is not None:
                     except: return 999
                     
                 with col_filt4:
-                    opts_years = sorted(df_filtered['Years in SG'].astype(str).unique().tolist(), key=sort_years_opts)
+                    opts_years = sorted([str(x) for x in df_filtered['Years in SG'].unique()], key=sort_years_opts)
                     selected_years = st.multiselect("4. Filter by Years in SG:", options=opts_years, default=[], key="sal_years")
                 with col_filt5:
                     base_qrtles = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max", "Unknown"]
-                    opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].astype(str).unique().tolist()]
-                    opts_qrtle += [q for q in df_filtered['New Quartile'].astype(str).unique().tolist() if q not in opts_qrtle]
+                    opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].astype(str).unique()]
+                    opts_qrtle += [q for q in df_filtered['New Quartile'].astype(str).unique() if q not in opts_qrtle]
                     selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[], key="sal_qrtle")
 
                 if opcion_detalle == "Adjustment Only": mask = solo_adj
@@ -618,8 +618,8 @@ if file1 is not None and file2 is not None:
                 if 'Chief Name' in df_detalle.columns:
                     df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
                 
-                if selected_years: df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
-                if selected_qrtle: df_detalle = df_detalle[df_detalle['New Quartile'].isin(selected_qrtle)]
+                if selected_years: df_detalle = df_detalle[df_detalle['Years in SG'].astype(str).isin(selected_years)]
+                if selected_qrtle: df_detalle = df_detalle[df_detalle['New Quartile'].astype(str).isin(selected_qrtle)]
 
                 def evaluar_alertas(row):
                     comentarios = []
@@ -699,6 +699,7 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
+                        # FIX PYARROW MULTIINDEX CRASH: Se remueve completamente set_index y se mantiene tabla plana
                         df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
                         
@@ -864,7 +865,7 @@ if file1 is not None and file2 is not None:
                 st.markdown("---")
                 st.markdown("### 👥 Bonus Eligible Employees List")
                 
-                rating_options = sorted(df_bonus_full[col_rating].astype(str).unique().tolist())
+                rating_options = sorted([str(x) for x in df_bonus_full[col_rating].unique()]) if col_rating in df_bonus_full.columns else []
                 selected_ratings = st.multiselect("1. Filter by Performance Rating:", options=rating_options, default=[], key="bon_rat_fil")
                 
                 df_bonus_table = df_bonus_full.copy()
