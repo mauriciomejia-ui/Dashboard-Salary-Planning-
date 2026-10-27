@@ -67,14 +67,12 @@ if file1 is not None and file2 is not None:
         df1 = pd.read_excel(file1, sheet_name="Salary", engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         df2 = pd.read_excel(file2, header=2, engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         
-        # BLINDAJE 1: Convertir todas las cabeceras a texto para evitar colapso
         df1.columns = df1.columns.astype(str)
         df2.columns = df2.columns.astype(str)
         
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
-        # Evitar duplicados de ID en SuperFlex para no corromper el cruce
         cols_df2 = [c for c in ['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender'] if c in df2.columns]
         if 'Global ID' in df2.columns:
             df2_sub = df2[cols_df2].drop_duplicates(subset=['Global ID'])
@@ -92,10 +90,9 @@ if file1 is not None and file2 is not None:
         else:
             df = df1.copy()
         
-        # Reasegurar nombres de columnas tras el merge
         df.columns = df.columns.astype(str)
         
-        # --- FIX PANDAS: LIMPIEZA GLOBAL DE TEXTOS PARA EVITAR CRASH DE ORDENAMIENTO ---
+        # --- FIX PANDAS: LIMPIEZA GLOBAL DE TEXTOS ---
         if 'Chief Name' in df.columns:
             df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
         if 'Employee Subgroup' in df.columns:
@@ -119,6 +116,18 @@ if file1 is not None and file2 is not None:
             
         if 'Compensation Area' in df.columns:
             df['Compensation Area'] = df['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+
+        # ==========================================
+        # SELECCIÓN DE CICLO (POPUP / RADIO)
+        # ==========================================
+        st.markdown("---")
+        st.markdown("### ⚙️ Select Planning Cycle")
+        cycle_choice = st.radio(
+            "Choose the cycle type to display the corresponding modules:",
+            ["1.- Merit / Bonus cycle", "2.- Offcycle / equity"],
+            horizontal=True
+        )
+        st.markdown("---")
         
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
@@ -127,13 +136,20 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        # FIX DEFINITIVO: Compresión de listas en Python puro para forzar string ANTES de ordenar
-        gerente_options = sorted([str(x) for x in df['Chief Name'].unique()]) if 'Chief Name' in df.columns else []
-        org_options = sorted([str(x) for x in df['Reporting Organization'].unique()]) if 'Reporting Organization' in df.columns else []
-        func_options = sorted([str(x) for x in df['Function'].unique()]) if 'Function' in df.columns else []
-        comp_options = sorted([str(x) for x in df['Compensation Area'].unique()]) if 'Compensation Area' in df.columns else []
-        subgroup_options = sorted([str(x) for x in df['Employee Subgroup'].unique()]) if 'Employee Subgroup' in df.columns else []
-        potential_options = sorted([str(x) for x in df['Potential'].unique()]) if 'Potential' in df.columns else []
+        # FIX DEFINITIVO: Filtrar "nan", vacíos y nulos de las opciones del filtro
+        def clean_filter_options(col_name):
+            if col_name in df.columns:
+                raw_options = df[col_name].unique()
+                cleaned = [str(x) for x in raw_options if str(x).lower().strip() not in ['nan', 'none', '<na>', 'unknown', '']]
+                return sorted(cleaned)
+            return []
+
+        gerente_options = clean_filter_options('Chief Name')
+        org_options = clean_filter_options('Reporting Organization')
+        func_options = clean_filter_options('Function')
+        comp_options = clean_filter_options('Compensation Area')
+        subgroup_options = clean_filter_options('Employee Subgroup')
+        potential_options = clean_filter_options('Potential')
 
         if filtro_elegido != "-- None --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
@@ -730,7 +746,6 @@ if file1 is not None and file2 is not None:
                         if not col_rating: col_rating = c
                 if not col_rating: col_rating = 'Potential' 
                 
-                # --- FIX: BÚSQUEDA DINÁMICA DE LA COLUMNA DE BONO PROPUESTO PARA EVITAR CRASH DE MATPLOTLIB ---
                 col_proposed_io = None
                 for c in df_filtered.columns:
                     cl = str(c).lower()
@@ -839,7 +854,8 @@ if file1 is not None and file2 is not None:
                 
                 st.markdown(html_table, unsafe_allow_html=True)
                 
-                fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
+                # FIX: REDUCIR TAMAÑO DE GRÁFICA A LA MITAD Y BLINDARLA
+                fig_bon, ax_bon = plt.subplots(figsize=(4, 3))
                 x_labels = [d['label'] for d in table_data]
                 y_vals = [d['avg_io'] for d in table_data]
                 
@@ -858,16 +874,15 @@ if file1 is not None and file2 is not None:
                 for bar in bars_b:
                     yval = bar.get_height()
                     if pd.notna(yval) and yval > 0:
-                        # --- FIX: TOPE FÍSICO AL TEXTO PARA EVITAR QUE MATPLOTLIB CREA IMÁGENES DE 21 MILLONES DE PÍXELES ---
                         plot_y = yval if yval <= 200 else 190
-                        ax_bon.text(bar.get_x() + bar.get_width()/2, plot_y - 12, f'{int(yval)}%', ha='center', va='top', color='white', fontweight='bold', fontsize=11)
+                        ax_bon.text(bar.get_x() + bar.get_width()/2, plot_y - 12, f'{int(yval)}%', ha='center', va='top', color='white', fontweight='bold', fontsize=8)
                 
                 ax_bon.spines['top'].set_visible(False)
                 ax_bon.spines['right'].set_visible(False)
                 ax_bon.spines['left'].set_visible(False)
                 ax_bon.spines['bottom'].set_color('#cccccc')
-                ax_bon.tick_params(axis='x', length=0)
-                ax_bon.tick_params(axis='y', length=0)
+                ax_bon.tick_params(axis='x', length=0, labelsize=7)
+                ax_bon.tick_params(axis='y', length=0, labelsize=7)
                 
                 st.pyplot(fig_bon)
                 plt.close(fig_bon)
@@ -1087,16 +1102,40 @@ if file1 is not None and file2 is not None:
                             
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your criteria.")
-                            cols_eq = list(df_equity_filtered.columns)
-                            if 'ALERT_CATEGORY' in cols_eq:
-                                cols_eq.insert(4, cols_eq.pop(cols_eq.index('ALERT_CATEGORY')))
-                                df_equity_filtered = df_equity_filtered[cols_eq]
-
-                            categorias_array = df_equity_filtered['ALERT_CATEGORY'].values
-                            cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
-                            df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
+                            # FIX DEFINITIVO: Filtrar estrictamente a las 13 columnas requeridas
+                            def get_eq_col(keywords, excludes=[]):
+                                for c in df_equity_filtered.columns:
+                                    cl = str(c).lower().strip()
+                                    if any(ex in cl for ex in excludes): continue
+                                    if any(kw in cl for kw in keywords): return c
+                                return None
+
+                            eq_c_name = get_eq_col(['employee name', 'full name', 'first name', 'last name', 'name'], ['manager', 'chief', 'company'])
+                            eq_c_id = 'Global ID'
+                            eq_c_org = 'Reporting Organization'
+                            eq_c_func = 'Function'
+                            eq_c_alert = 'ALERT_CATEGORY'
+                            eq_c_pos = get_eq_col(['position', 'job title', 'title'])
+                            eq_c_sg = get_eq_col(['salary grade', 'grade', 'sg'], ['range', 'date', 'years', 'new'])
+                            eq_c_min = get_eq_col(['minimum stock', 'stock min', 'min stock', 'minimum']) 
+                            eq_c_mid = get_eq_col(['midpoint of stock', 'stock mid', 'mid stock', 'midpoint'])
+                            eq_c_max = get_eq_col(['maximum of stock', 'stock max', 'max stock', 'maximum'])
+                            eq_c_prop = get_eq_col(['proposed rec', 'recommendation (%)', 'reccomendation (%)', 'proposed', 'recommendation value'])
+                            eq_c_watch = get_eq_col(['watch out', 'recommendation watch out', 'reccomendation watch out'])
+                            eq_c_comm = get_eq_col(['stock comment', 'equity comment', 'comment'])
+
+                            target_cols = [eq_c_name, eq_c_id, eq_c_org, eq_c_func, eq_c_alert, eq_c_pos, eq_c_sg, eq_c_min, eq_c_mid, eq_c_max, eq_c_prop, eq_c_watch, eq_c_comm]
+                            
+                            final_cols = []
+                            for c in target_cols:
+                                if c and c in df_equity_filtered.columns and c not in final_cols:
+                                    final_cols.append(c)
+
+                            df_visual_eq = df_equity_filtered[final_cols].copy()
                             df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                            
+                            categorias_array = df_visual_eq['ALERT_CATEGORY'].values if 'ALERT_CATEGORY' in df_visual_eq.columns else []
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
@@ -1122,20 +1161,29 @@ if file1 is not None and file2 is not None:
             # ==========================================
             #   LÓGICA PRINCIPAL DE RENDERIZADO
             # ==========================================
+            sal_data, bon_data, eq_data = None, None, None
+            
             if pdf_mode:
                 sal_data = render_salary()
-                st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
-                bon_data = render_bonus()
-                st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
-                eq_data = render_equity()
-            else:
-                tab_salary, tab_bonus, tab_equity = st.tabs(["💰 Salary Planning", "🎯 Bonus Planning", "📈 Equity Planning"])
-                with tab_salary:
-                    sal_data = render_salary()
-                with tab_bonus:
+                if cycle_choice == "1.- Merit / Bonus cycle":
+                    st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
                     bon_data = render_bonus()
-                with tab_equity:
+                else:
+                    st.markdown("<div style='page-break-after: always; margin-top: 50px;'></div>", unsafe_allow_html=True)
                     eq_data = render_equity()
+            else:
+                if cycle_choice == "1.- Merit / Bonus cycle":
+                    tab_salary, tab_bonus = st.tabs(["💰 Salary Planning", "🎯 Bonus Planning"])
+                    with tab_salary:
+                        sal_data = render_salary()
+                    with tab_bonus:
+                        bon_data = render_bonus()
+                else:
+                    tab_salary, tab_equity = st.tabs(["💰 Salary Planning", "📈 Equity Planning"])
+                    with tab_salary:
+                        sal_data = render_salary()
+                    with tab_equity:
+                        eq_data = render_equity()
 
             # ==========================================
             #   MOTOR DE EXPORTACIÓN A EXCEL EN SIDEBAR
@@ -1160,7 +1208,7 @@ if file1 is not None and file2 is not None:
                         df_det_excel = df_det_excel.drop(columns=[c for c in cols_d if c in df_det_excel.columns])
                         df_det_excel.to_excel(writer, sheet_name='Salary Details', index=False)
                 
-                if 'bon_data' in locals() and bon_data:
+                if bon_data:
                     bon_summary_df, bon_brk_org, bon_brk_func, df_bon_filtered = bon_data
                     if bon_summary_df is not None and not bon_summary_df.empty: bon_summary_df.to_excel(writer, sheet_name='Bonus Summary', index=False)
                     if bon_brk_org is not None and not bon_brk_org.empty: bon_brk_org.to_excel(writer, sheet_name='Bonus by Org', index=False)
@@ -1178,7 +1226,7 @@ if file1 is not None and file2 is not None:
                     if eq_brk_func is not None: eq_brk_func.to_excel(writer, sheet_name='Equity by Func', index=False)
                     if df_eq_filtered is not None and not df_eq_filtered.empty:
                         df_eq_excel = df_eq_filtered.copy()
-                        cols_e = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
+                        cols_e = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile', 'ALERT_CATEGORY']
                         df_eq_excel = df_eq_excel.drop(columns=[c for c in cols_e if c in df_eq_excel.columns])
                         df_eq_excel.to_excel(writer, sheet_name='Equity Details', index=False)
                         
@@ -1193,7 +1241,6 @@ if file1 is not None and file2 is not None:
             )
 
     except Exception as e:
-        # Mostramos también el traceback completo por si queda algún otro error oculto
         st.error(f"An error occurred: {e}")
         st.code(traceback.format_exc(), language="python")
 else:
