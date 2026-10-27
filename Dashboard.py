@@ -235,7 +235,7 @@ if file1 is not None and file2 is not None:
                     "  .main .block-container { max-width: 100% !important; width: 100% !important; padding: 1cm !important; }\n"
                     "  @page { size: landscape; margin: 1cm; }\n"
                     "}\n"
-                    "</style>"
+                    "</style>\n"
                 )
                 st.markdown(pdf_css, unsafe_allow_html=True)
                 st.sidebar.success("✅ PDF mode active. Press **Ctrl + P** (or Cmd + P) in your browser and select 'Save as PDF'. Ensure 'Background graphics' is enabled.")
@@ -312,7 +312,7 @@ if file1 is not None and file2 is not None:
                     s_au = pd.to_numeric(df_base.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     
                     df_temp = pd.DataFrame({
-                        'Group': df_base[col_name].fillna('Unknown'),
+                        'Group': df_base[col_name].fillna('Unknown').astype(str),
                         'Adj_Cost': np.where(a_pct > 0, (a_pct / 100) * s_t, 0),
                         'Promo_Cost': np.where(p_pct > 0, (p_pct / 100) * s_t, 0),
                         'Total_Salary': s_t,
@@ -339,12 +339,12 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True)
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), use_container_width=True)
 
                 st.markdown("---")
 
@@ -665,10 +665,9 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
+                        # FIX: EVITAR MULTIINDEX QUE ROMPE PYARROW
                         df_visual = df_visual.astype(str)
                         colores_array = df_detalle['RowColor'].values
-                        cols_fijas = list(df_visual.columns[:4])
-                        df_visual = df_visual.set_index(cols_fijas)
                         
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
@@ -676,7 +675,7 @@ if file1 is not None and file2 is not None:
                             return pd.DataFrame(style_dict, index=df_vista.index)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado, width='stretch')
+                        st.dataframe(df_estilizado, use_container_width=True)
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -767,11 +766,11 @@ if file1 is not None and file2 is not None:
                 html_rows = ""
                 for d in table_data:
                     html_rows += "<tr>"
-                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;'>{d['label']}</td>"
-                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['count']}</td>"
-                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['pct']:.0f}%</td>"
-                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;'>{d['avg_io']:.0f}%</td>"
-                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['ref']}</td>"
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td>'
                     html_rows += "</tr>"
                 
                 html_table = (
@@ -861,7 +860,7 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    st.dataframe(df_bonus_table[cols_to_show].astype(str), width='stretch')
+                    st.dataframe(df_bonus_table[cols_to_show].astype(str), use_container_width=True)
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -965,7 +964,7 @@ if file1 is not None and file2 is not None:
                         
                         def build_equity_breakdown(df_base, col_name):
                             df_temp = pd.DataFrame({
-                                'Group': df_base[col_name].fillna('Unknown'),
+                                'Group': df_base[col_name].fillna('Unknown').astype(str),
                                 'Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
                                 'Proposed': df_base['Proposed Recommendation Value']
                             })
@@ -986,13 +985,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True)
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), use_container_width=True)
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1051,9 +1050,8 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
+                            # FIX: EVITAR MULTIINDEX QUE ROMPE PYARROW
                             df_visual_eq = df_visual_eq.astype(str)
-                            cols_fijas_eq = list(df_visual_eq.columns[:4])
-                            df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
@@ -1065,7 +1063,7 @@ if file1 is not None and file2 is not None:
                                 return pd.DataFrame(style_dict, index=df_vista.index)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled, width='stretch')
+                            st.dataframe(df_eq_styled, use_container_width=True)
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
