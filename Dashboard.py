@@ -235,7 +235,7 @@ if file1 is not None and file2 is not None:
                     "  .main .block-container { max-width: 100% !important; width: 100% !important; padding: 1cm !important; }\n"
                     "  @page { size: landscape; margin: 1cm; }\n"
                     "}\n"
-                    "</style>\n"
+                    "</style>"
                 )
                 st.markdown(pdf_css, unsafe_allow_html=True)
                 st.sidebar.success("✅ PDF mode active. Press **Ctrl + P** (or Cmd + P) in your browser and select 'Save as PDF'. Ensure 'Background graphics' is enabled.")
@@ -518,7 +518,7 @@ if file1 is not None and file2 is not None:
                     
                     cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
                     otras_cols = [c for c in pivot_df.columns if c not in orden_qrtle]
-                    pivot_df = pivot_df[cols_presentes + otras_cols]
+                    pivot_df = pivot_df[cols_presentes + list(otras_cols)]
                     
                     def sort_years(idx):
                         if "Unknown" in idx: return 999
@@ -767,11 +767,11 @@ if file1 is not None and file2 is not None:
                 html_rows = ""
                 for d in table_data:
                     html_rows += "<tr>"
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td>'
-                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td>'
+                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;'>{d['label']}</td>"
+                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['count']}</td>"
+                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['pct']:.0f}%</td>"
+                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;'>{d['avg_io']:.0f}%</td>"
+                    html_rows += f"<td style='padding: 10px; border: 1px solid #e0e0e0; color: #333;'>{d['ref']}</td>"
                     html_rows += "</tr>"
                 
                 html_table = (
