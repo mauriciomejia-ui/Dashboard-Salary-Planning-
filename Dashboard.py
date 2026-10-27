@@ -81,13 +81,13 @@ if file1 is not None and file2 is not None:
         
         df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
         
-        df['Chief Name'] = df['Chief Name'].fillna("No Manager Assigned")
-        df['Employee Subgroup'] = df['Employee Subgroup'].replace('nan', 'Unknown').fillna('Unknown')
-        df['Gender'] = df['Gender'].replace('nan', 'Unknown').fillna('Unknown')
+        # --- FIX PANDAS 3.1.0: EVITAR FILLNA CON TEXTO EN COLUMNAS MIXTAS ---
+        df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
+        df['Employee Subgroup'] = df['Employee Subgroup'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        df['Gender'] = df['Gender'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
         
         if 'Potential' in df.columns:
-            df['Potential'] = df['Potential'].fillna('Not Assigned').astype(str)
-            df['Potential'] = df['Potential'].replace({'nan': 'Not Assigned', 'None Selected': 'Not Assigned'})
+            df['Potential'] = df['Potential'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'Not Assigned')
         else:
             df['Potential'] = 'Not Assigned'
         
@@ -98,10 +98,10 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist())
-        org_options = sorted(df['Reporting Organization'].dropna().unique().tolist())
-        func_options = sorted(df['Function'].dropna().unique().tolist())
-        comp_options = sorted(df['Compensation Area'].dropna().unique().tolist())
+        gerente_options = sorted(df['Chief Name'].unique().tolist())
+        org_options = sorted(df['Reporting Organization'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
+        func_options = sorted(df['Function'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
+        comp_options = sorted(df['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
         subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
         potential_options = sorted(df['Potential'].unique().tolist())
 
@@ -165,13 +165,19 @@ if file1 is not None and file2 is not None:
         filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
         filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
-        df_filtered = df[
-            (df['Chief Name'].isin(filtros_finales_gerentes)) &
-            (df['Reporting Organization'].isin(filtros_finales_orgs)) &
-            (df['Function'].isin(filtros_finales_funcs)) &
-            (df['Compensation Area'].isin(filtros_finales_comps)) &
-            (df['Employee Subgroup'].isin(filtros_finales_subgroups)) &
-            (df['Potential'].isin(filtros_finales_potentials))
+        # Asegurar que las columnas a filtrar también se traten como string para el cruce exacto
+        df_temp_filter = df.copy()
+        df_temp_filter['Reporting Organization'] = df_temp_filter['Reporting Organization'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        df_temp_filter['Function'] = df_temp_filter['Function'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        df_temp_filter['Compensation Area'] = df_temp_filter['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        
+        df_filtered = df_temp_filter[
+            (df_temp_filter['Chief Name'].isin(filtros_finales_gerentes)) &
+            (df_temp_filter['Reporting Organization'].isin(filtros_finales_orgs)) &
+            (df_temp_filter['Function'].isin(filtros_finales_funcs)) &
+            (df_temp_filter['Compensation Area'].isin(filtros_finales_comps)) &
+            (df_temp_filter['Employee Subgroup'].isin(filtros_finales_subgroups)) &
+            (df_temp_filter['Potential'].isin(filtros_finales_potentials))
         ].copy()
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
@@ -315,7 +321,8 @@ if file1 is not None and file2 is not None:
                     s_au = pd.to_numeric(df_base.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     
                     df_temp = pd.DataFrame({
-                        'Group': df_base[col_name].fillna('Unknown'),
+                        # FIX PANDAS 3.1.0: EVITA FILLNA SOBRE DATOS QUE PUEDEN SER FLOAT
+                        'Group': df_base[col_name].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown'),
                         'Adj_Cost': np.where(a_pct > 0, (a_pct / 100) * s_t, 0),
                         'Promo_Cost': np.where(p_pct > 0, (p_pct / 100) * s_t, 0),
                         'Total_Salary': s_t,
@@ -342,15 +349,16 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
 
                 st.markdown("---")
 
+                # PREPARE DATA FOR CHARTS
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -420,7 +428,8 @@ if file1 is not None and file2 is not None:
                     fig3, ax3 = plt.subplots(figsize=(7, 6))
                     df_adj = df_filtered[cond_adj].copy()
                     if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
-                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].fillna('No Reason Assigned').replace({'None Selected': 'No Reason Assigned'})
+                        # FIX PANDAS 3.1.0
+                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'No Reason Assigned')
                         reason_counts = df_adj['Adjustment Reason'].value_counts()
                         total_reasons = reason_counts.sum()
                         if total_reasons > 0:
@@ -667,9 +676,12 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        # FIX: RESETEAR EL ÍNDICE Y FORZAR TEXTO PARA BLINDAR A PYARROW
-                        df_visual = df_visual.fillna("").astype(str).reset_index(drop=True)
+                        # FIX PANDAS 3.1.0: EVITAR FILLNA SOBRE FLOAT PARA RENDERIZADO
+                        df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                        
                         colores_array = df_detalle['RowColor'].values
+                        cols_fijas = list(df_visual.columns[:4])
+                        df_visual = df_visual.set_index(cols_fijas)
                         
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
@@ -677,7 +689,7 @@ if file1 is not None and file2 is not None:
                             return pd.DataFrame(style_dict, index=df_vista.index)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado)
+                        st.dataframe(df_estilizado, width='stretch')
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -862,9 +874,9 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    # FIX: RESETEAR EL ÍNDICE Y FORZAR TEXTO PARA BLINDAR A PYARROW
-                    df_bonus_show = df_bonus_table[cols_to_show].fillna("").astype(str).reset_index(drop=True)
-                    st.dataframe(df_bonus_show)
+                    # FIX PANDAS 3.1.0: STR EXPLICITO
+                    df_bonus_show = df_bonus_table[cols_to_show].astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                    st.dataframe(df_bonus_show, width='stretch')
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -968,7 +980,8 @@ if file1 is not None and file2 is not None:
                         
                         def build_equity_breakdown(df_base, col_name):
                             df_temp = pd.DataFrame({
-                                'Group': df_base[col_name].fillna('Unknown').astype(str),
+                                # FIX PANDAS 3.1.0: EVITAR FILLNA SOBRE DATOS MIXTOS
+                                'Group': df_base[col_name].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown'),
                                 'Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
                                 'Proposed': df_base['Proposed Recommendation Value']
                             })
@@ -989,13 +1002,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1054,8 +1067,9 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
-                            # FIX: RESETEAR EL ÍNDICE Y FORZAR TEXTO PARA BLINDAR A PYARROW
-                            df_visual_eq = df_visual_eq.fillna("").astype(str).reset_index(drop=True)
+                            # FIX PANDAS 3.1.0: PREVENIR COLAPSO EN LA TABLA DE EQUITY
+                            df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                            
                             cols_fijas_eq = list(df_visual_eq.columns[:4])
                             df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
@@ -1069,7 +1083,7 @@ if file1 is not None and file2 is not None:
                                 return pd.DataFrame(style_dict, index=df_vista.index)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled)
+                            st.dataframe(df_eq_styled, width='stretch')
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
