@@ -67,12 +67,14 @@ if file1 is not None and file2 is not None:
         df1 = pd.read_excel(file1, sheet_name="Salary", engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         df2 = pd.read_excel(file2, header=2, engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         
+        # BLINDAJE 1: Convertir todas las cabeceras a texto para evitar colapso
         df1.columns = df1.columns.astype(str)
         df2.columns = df2.columns.astype(str)
         
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
+        # Evitar duplicados de ID en SuperFlex para no corromper el cruce
         cols_df2 = [c for c in ['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender'] if c in df2.columns]
         if 'Global ID' in df2.columns:
             df2_sub = df2[cols_df2].drop_duplicates(subset=['Global ID'])
@@ -90,6 +92,7 @@ if file1 is not None and file2 is not None:
         else:
             df = df1.copy()
         
+        # Reasegurar nombres de columnas tras el merge
         df.columns = df.columns.astype(str)
         
         # --- FIX PANDAS: LIMPIEZA GLOBAL DE TEXTOS ---
@@ -136,7 +139,6 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        # FIX DEFINITIVO: Filtrar "nan", vacíos y nulos de las opciones del filtro
         def clean_filter_options(col_name):
             if col_name in df.columns:
                 raw_options = df[col_name].unique()
@@ -854,7 +856,6 @@ if file1 is not None and file2 is not None:
                 
                 st.markdown(html_table, unsafe_allow_html=True)
                 
-                # FIX: REDUCIR TAMAÑO DE GRÁFICA A LA MITAD Y BLINDARLA
                 fig_bon, ax_bon = plt.subplots(figsize=(4, 3))
                 x_labels = [d['label'] for d in table_data]
                 y_vals = [d['avg_io'] for d in table_data]
@@ -1103,7 +1104,6 @@ if file1 is not None and file2 is not None:
                         if not df_equity_filtered.empty:
                             st.write(f"Showing **{len(df_equity_filtered)}** employees based on your criteria.")
                             
-                            # FIX DEFINITIVO: Filtrar estrictamente a las 13 columnas requeridas
                             def get_eq_col(keywords, excludes=[]):
                                 for c in df_equity_filtered.columns:
                                     cl = str(c).lower().strip()
@@ -1121,7 +1121,10 @@ if file1 is not None and file2 is not None:
                             eq_c_min = get_eq_col(['minimum stock', 'stock min', 'min stock', 'minimum']) 
                             eq_c_mid = get_eq_col(['midpoint of stock', 'stock mid', 'mid stock', 'midpoint'])
                             eq_c_max = get_eq_col(['maximum of stock', 'stock max', 'max stock', 'maximum'])
-                            eq_c_prop = get_eq_col(['proposed rec', 'recommendation (%)', 'reccomendation (%)', 'proposed', 'recommendation value'])
+                            
+                            # FIX: Asignar directamente la columna BN (índice 65) sin usar palabras clave
+                            eq_c_prop = df_equity_filtered.columns[col_bn_idx] if len(df_equity_filtered.columns) > col_bn_idx else None
+                            
                             eq_c_watch = get_eq_col(['watch out', 'recommendation watch out', 'reccomendation watch out'])
                             eq_c_comm = get_eq_col(['stock comment', 'equity comment', 'comment'])
 
@@ -1133,6 +1136,11 @@ if file1 is not None and file2 is not None:
                                     final_cols.append(c)
 
                             df_visual_eq = df_equity_filtered[final_cols].copy()
+                            
+                            # FIX: Renombrar para asegurar que diga "Proposed Recommendation (%)"
+                            if eq_c_prop in df_visual_eq.columns:
+                                df_visual_eq = df_visual_eq.rename(columns={eq_c_prop: "Proposed Recommendation (%)"})
+                                
                             df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
                             
                             categorias_array = df_visual_eq['ALERT_CATEGORY'].values if 'ALERT_CATEGORY' in df_visual_eq.columns else []
