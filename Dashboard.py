@@ -81,7 +81,7 @@ if file1 is not None and file2 is not None:
         
         df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
         
-        # --- FIX PANDAS 3.1.0: EVITAR FILLNA CON TEXTO EN COLUMNAS MIXTAS ---
+        # --- FIX PANDAS 3.1.0: LIMPIEZA GLOBAL DE TEXTOS PARA EVITAR CRASH DE ORDENAMIENTO ---
         df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
         df['Employee Subgroup'] = df['Employee Subgroup'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
         df['Gender'] = df['Gender'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
@@ -90,6 +90,18 @@ if file1 is not None and file2 is not None:
             df['Potential'] = df['Potential'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'Not Assigned')
         else:
             df['Potential'] = 'Not Assigned'
+
+        if 'Adjustment Reason' in df.columns:
+            df['Adjustment Reason'] = df['Adjustment Reason'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'No Reason Assigned')
+            
+        if 'Reporting Organization' in df.columns:
+            df['Reporting Organization'] = df['Reporting Organization'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+            
+        if 'Function' in df.columns:
+            df['Function'] = df['Function'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+            
+        if 'Compensation Area' in df.columns:
+            df['Compensation Area'] = df['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
         
         # --- SIDEBAR: LOAD FILTERS ---
         st.sidebar.header("💾 My Saved Filters")
@@ -99,9 +111,9 @@ if file1 is not None and file2 is not None:
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
         gerente_options = sorted(df['Chief Name'].unique().tolist())
-        org_options = sorted(df['Reporting Organization'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
-        func_options = sorted(df['Function'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
-        comp_options = sorted(df['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown').unique().tolist())
+        org_options = sorted(df['Reporting Organization'].unique().tolist()) if 'Reporting Organization' in df.columns else []
+        func_options = sorted(df['Function'].unique().tolist()) if 'Function' in df.columns else []
+        comp_options = sorted(df['Compensation Area'].unique().tolist()) if 'Compensation Area' in df.columns else []
         subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
         potential_options = sorted(df['Potential'].unique().tolist())
 
@@ -165,19 +177,14 @@ if file1 is not None and file2 is not None:
         filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
         filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
-        # Asegurar que las columnas a filtrar también se traten como string para el cruce exacto
-        df_temp_filter = df.copy()
-        df_temp_filter['Reporting Organization'] = df_temp_filter['Reporting Organization'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
-        df_temp_filter['Function'] = df_temp_filter['Function'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
-        df_temp_filter['Compensation Area'] = df_temp_filter['Compensation Area'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
-        
-        df_filtered = df_temp_filter[
-            (df_temp_filter['Chief Name'].isin(filtros_finales_gerentes)) &
-            (df_temp_filter['Reporting Organization'].isin(filtros_finales_orgs)) &
-            (df_temp_filter['Function'].isin(filtros_finales_funcs)) &
-            (df_temp_filter['Compensation Area'].isin(filtros_finales_comps)) &
-            (df_temp_filter['Employee Subgroup'].isin(filtros_finales_subgroups)) &
-            (df_temp_filter['Potential'].isin(filtros_finales_potentials))
+        # El dataframe ya viene casteado a string en sus columnas clave, previniendo choques
+        df_filtered = df[
+            (df['Chief Name'].isin(filtros_finales_gerentes)) &
+            (df['Reporting Organization'].isin(filtros_finales_orgs)) &
+            (df['Function'].isin(filtros_finales_funcs)) &
+            (df['Compensation Area'].isin(filtros_finales_comps)) &
+            (df['Employee Subgroup'].isin(filtros_finales_subgroups)) &
+            (df['Potential'].isin(filtros_finales_potentials))
         ].copy()
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
@@ -208,7 +215,7 @@ if file1 is not None and file2 is not None:
                 if val == 0: return "< 1 Year"
                 elif val == 1: return "1 Year"
                 else: return f"{val} Years"
-            df_filtered['Years in SG'] = df_filtered['Years_Raw'].apply(format_years)
+            df_filtered['Years in SG'] = df_filtered['Years_Raw'].apply(format_years).astype(str)
         else:
             df_filtered['Years in SG'] = "Unknown"
 
@@ -283,12 +290,6 @@ if file1 is not None and file2 is not None:
                     status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
-
-                cost_df = pd.DataFrame({
-                    "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
-                    "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
-                    "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
-                })
                 
                 summary_html = (
                     "<table style='width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;'>"
@@ -321,8 +322,7 @@ if file1 is not None and file2 is not None:
                     s_au = pd.to_numeric(df_base.get('$ New Annual Salary(in USD)', pd.Series(0, index=df_base.index)), errors='coerce').fillna(0)
                     
                     df_temp = pd.DataFrame({
-                        # FIX PANDAS 3.1.0: EVITA FILLNA SOBRE DATOS QUE PUEDEN SER FLOAT
-                        'Group': df_base[col_name].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown'),
+                        'Group': df_base[col_name].astype(str),
                         'Adj_Cost': np.where(a_pct > 0, (a_pct / 100) * s_t, 0),
                         'Promo_Cost': np.where(p_pct > 0, (p_pct / 100) * s_t, 0),
                         'Total_Salary': s_t,
@@ -428,9 +428,7 @@ if file1 is not None and file2 is not None:
                     fig3, ax3 = plt.subplots(figsize=(7, 6))
                     df_adj = df_filtered[cond_adj].copy()
                     if not df_adj.empty and 'Adjustment Reason' in df_adj.columns:
-                        # FIX PANDAS 3.1.0
-                        df_adj['Adjustment Reason'] = df_adj['Adjustment Reason'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'No Reason Assigned')
-                        reason_counts = df_adj['Adjustment Reason'].value_counts()
+                        reason_counts = df_adj['Adjustment Reason'].astype(str).value_counts()
                         total_reasons = reason_counts.sum()
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
@@ -446,7 +444,7 @@ if file1 is not None and file2 is not None:
                     fig4, ax4 = plt.subplots(figsize=(7, 6))
                     df_pot_mov = df_filtered[tiene_movimiento].copy()
                     if not df_pot_mov.empty and 'Potential' in df_pot_mov.columns:
-                        pot_counts = df_pot_mov['Potential'].value_counts()
+                        pot_counts = df_pot_mov['Potential'].astype(str).value_counts()
                         total_pot = pot_counts.sum()
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
@@ -464,8 +462,8 @@ if file1 is not None and file2 is not None:
                 with col5:
                     fig5, ax5 = plt.subplots(figsize=(7, 6))
                     if not df_filtered.empty and 'Current Quartile' in df_filtered.columns and 'New Quartile' in df_filtered.columns:
-                        counts_curr = df_filtered['Current Quartile'].value_counts()
-                        counts_new = df_filtered['New Quartile'].value_counts()
+                        counts_curr = df_filtered['Current Quartile'].astype(str).value_counts()
+                        counts_new = df_filtered['New Quartile'].astype(str).value_counts()
                         final_order = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
                         val_curr = [counts_curr.get(c, 0) for c in final_order]
                         val_new = [counts_new.get(c, 0) for c in final_order]
@@ -500,7 +498,7 @@ if file1 is not None and file2 is not None:
                     fig6, ax6 = plt.subplots(figsize=(7, 6))
                     df_gender_mov = df_filtered[tiene_movimiento].copy()
                     if not df_gender_mov.empty and 'Gender' in df_gender_mov.columns:
-                        gender_counts = df_gender_mov['Gender'].value_counts()
+                        gender_counts = df_gender_mov['Gender'].astype(str).value_counts()
                         total_gender = gender_counts.sum()
                         if total_gender > 0:
                             colores_gender = sns.color_palette("pastel", len(gender_counts))
@@ -525,7 +523,7 @@ if file1 is not None and file2 is not None:
                 
                 if not df_pot_filtered.empty and 'Years in SG' in df_pot_filtered.columns and 'New Quartile' in df_pot_filtered.columns:
                     orden_qrtle = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max"]
-                    pivot_df = pd.crosstab(df_pot_filtered['Years in SG'], df_pot_filtered['New Quartile'])
+                    pivot_df = pd.crosstab(df_pot_filtered['Years in SG'].astype(str), df_pot_filtered['New Quartile'].astype(str))
                     
                     cols_presentes = [c for c in orden_qrtle if c in pivot_df.columns]
                     otras_cols = [c for c in pivot_df.columns if c not in orden_qrtle]
@@ -578,12 +576,12 @@ if file1 is not None and file2 is not None:
                     except: return 999
                     
                 with col_filt4:
-                    opts_years = sorted(df_filtered['Years in SG'].unique().tolist(), key=sort_years_opts)
+                    opts_years = sorted(df_filtered['Years in SG'].astype(str).unique().tolist(), key=sort_years_opts)
                     selected_years = st.multiselect("4. Filter by Years in SG:", options=opts_years, default=[], key="sal_years")
                 with col_filt5:
                     base_qrtles = ["Below Min", "1Q", "2Q", "3Q", "4Q", "Above max", "Unknown"]
-                    opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].unique().tolist()]
-                    opts_qrtle += [q for q in df_filtered['New Quartile'].unique().tolist() if q not in opts_qrtle]
+                    opts_qrtle = [q for q in base_qrtles if q in df_filtered['New Quartile'].astype(str).unique().tolist()]
+                    opts_qrtle += [q for q in df_filtered['New Quartile'].astype(str).unique().tolist() if q not in opts_qrtle]
                     selected_qrtle = st.multiselect("5. Filter by New Quartile:", options=opts_qrtle, default=[], key="sal_qrtle")
 
                 if opcion_detalle == "Adjustment Only": mask = solo_adj
@@ -676,12 +674,8 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        # FIX PANDAS 3.1.0: EVITAR FILLNA SOBRE FLOAT PARA RENDERIZADO
-                        df_visual = df_visual.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
-                        
+                        df_visual = df_visual.astype(str).reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
-                        cols_fijas = list(df_visual.columns[:4])
-                        df_visual = df_visual.set_index(cols_fijas)
                         
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
@@ -845,7 +839,7 @@ if file1 is not None and file2 is not None:
                 st.markdown("---")
                 st.markdown("### 👥 Bonus Eligible Employees List")
                 
-                rating_options = sorted(df_bonus_full[col_rating].dropna().astype(str).unique().tolist())
+                rating_options = sorted(df_bonus_full[col_rating].astype(str).unique().tolist())
                 selected_ratings = st.multiselect("1. Filter by Performance Rating:", options=rating_options, default=[], key="bon_rat_fil")
                 
                 df_bonus_table = df_bonus_full.copy()
@@ -874,8 +868,7 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    # FIX PANDAS 3.1.0: STR EXPLICITO
-                    df_bonus_show = df_bonus_table[cols_to_show].astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                    df_bonus_show = df_bonus_table[cols_to_show].astype(str).reset_index(drop=True)
                     st.dataframe(df_bonus_show, width='stretch')
                 
                 bon_summary_df = pd.DataFrame(table_data)
@@ -980,8 +973,7 @@ if file1 is not None and file2 is not None:
                         
                         def build_equity_breakdown(df_base, col_name):
                             df_temp = pd.DataFrame({
-                                # FIX PANDAS 3.1.0: EVITAR FILLNA SOBRE DATOS MIXTOS
-                                'Group': df_base[col_name].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown'),
+                                'Group': df_base[col_name].astype(str),
                                 'Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
                                 'Proposed': df_base['Proposed Recommendation Value']
                             })
@@ -1067,11 +1059,7 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
-                            # FIX PANDAS 3.1.0: PREVENIR COLAPSO EN LA TABLA DE EQUITY
-                            df_visual_eq = df_visual_eq.astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
-                            
-                            cols_fijas_eq = list(df_visual_eq.columns[:4])
-                            df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
+                            df_visual_eq = df_visual_eq.astype(str).reset_index(drop=True)
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
