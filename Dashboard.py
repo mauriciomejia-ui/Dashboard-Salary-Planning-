@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -221,15 +220,14 @@ if file1 is not None and file2 is not None:
         else:
             df_filtered['New Quartile'] = "Unknown"
 
-
         if df_filtered.empty:
             st.warning("No data matches these filters.")
         else:
             # ==========================================
-            # SECCIÓN DE EXPORTACIÓN Y PDF (SIDEBAR)
+            # SECCIÓN DE EXPORTACIÓN A PDF (SIDEBAR)
             # ==========================================
             st.sidebar.markdown("---")
-            st.sidebar.subheader("📄 Export Report")
+            st.sidebar.subheader("📄 Export to PDF")
             pdf_mode = st.sidebar.checkbox("🖨️ Enable PDF Print Mode (All-in-one view)")
             
             if pdf_mode:
@@ -244,35 +242,17 @@ if file1 is not None and file2 is not None:
                         width: 100% !important;
                         padding: 1cm !important;
                     }
-                    @page {
-                        size: landscape;
-                        margin: 1cm;
-                    }
+                    @page { size: landscape; margin: 1cm; }
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                
-                components.html(
-                    """
-                    <script>
-                    function printDashboard() {
-                        window.parent.print();
-                    }
-                    </script>
-                    <button onclick="printDashboard()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: sans-serif;">
-                        🖨️ Save Dashboard as PDF
-                    </button>
-                    """,
-                    height=50
-                )
-                st.sidebar.info("Tip: In the print dialog, select 'Save as PDF', enable 'Background Graphics', and hide Headers/Footers.")
+                st.sidebar.success("✅ PDF mode active. Press **Ctrl + P** (or Cmd + P) in your browser and select 'Save as PDF'. Ensure 'Background graphics' is enabled.")
 
             # ==========================================
             #           FUNCIÓN: SALARY PLANNING
             # ==========================================
             def render_salary():
                 df_breakdown_org, df_breakdown_func, df_detalle = None, None, None
-                
                 st.subheader("💰 Cost Summary")
                 
                 col_b1, col_b2 = st.columns([1, 3])
@@ -329,7 +309,6 @@ if file1 is not None and file2 is not None:
                 </table>"""
                 st.markdown(summary_html, unsafe_allow_html=True)
                 
-                # --- DESGLOSE DE COSTOS (BREAKDOWN) ---
                 st.markdown("### 🏢 Cost Breakdown (By Org & Function)")
                 tab_org, tab_func = st.tabs(["By Reporting Organization", "By Function"])
                 
@@ -389,7 +368,7 @@ if file1 is not None and file2 is not None:
 
                 st.markdown("---")
 
-                # --- PREPARE DATA FOR CHARTS ---
+                # PREPARE DATA FOR CHARTS
                 cond_adj = adj_pct > 0
                 cond_promo = promo_pct > 0
                 tiene_movimiento = cond_adj | cond_promo
@@ -425,7 +404,6 @@ if file1 is not None and file2 is not None:
                             sizes = [num_movimientos, total_personas - num_movimientos]
                             labels = ['With Movement', 'No Movement']
                             colors = ['#ff9999', '#d3d3d3']
-                            
                             wedges, texts, autotexts = ax1.pie(
                                 sizes, startangle=90, colors=colors, 
                                 autopct=make_autopct(sizes), pctdistance=0.65,
@@ -434,7 +412,6 @@ if file1 is not None and file2 is not None:
                             )
                             leyenda1 = [f"{l} - {s} ({s/total_personas*100:.1f}%)" for l, s in zip(labels, sizes)]
                             ax1.legend(wedges, leyenda1, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-                        
                         ax1.axis('equal') 
                         ax1.set_title('Overall Movement', fontweight='bold', pad=15)
                     else:
@@ -447,7 +424,6 @@ if file1 is not None and file2 is not None:
                     raw_sizes2 = [num_solo_adj, num_solo_promo, num_ambos, num_sin_mov]
                     raw_labels2 = ['Adjustment Only', 'Promotion Only', 'Both', 'No Movement']
                     raw_colors2 = ['#ffb3e6', '#c2c2f0', '#ff6666', '#c2f0c2']
-                    
                     sizes2 = [s for s in raw_sizes2 if s > 0]
                     labels2 = [l for s, l in zip(raw_sizes2, raw_labels2) if s > 0]
                     colors2 = [c for s, c in zip(raw_sizes2, raw_colors2) if s > 0]
@@ -483,7 +459,6 @@ if file1 is not None and file2 is not None:
                         
                         if total_reasons > 0:
                             colores_motivos = sns.color_palette("pastel", len(reason_counts))
-                            
                             wedges3, texts3, autotexts3 = ax3.pie(
                                 reason_counts.values, startangle=90, colors=colores_motivos,
                                 autopct=make_autopct(reason_counts.values), pctdistance=0.65,
@@ -511,7 +486,6 @@ if file1 is not None and file2 is not None:
                         
                         if total_pot > 0:
                             colores_pot = sns.color_palette("Set3", len(pot_counts))
-                            
                             wedges4, texts4, autotexts4 = ax4.pie(
                                 pot_counts.values, startangle=90, colors=colores_pot,
                                 autopct=make_autopct(pot_counts.values), pctdistance=0.65,
@@ -632,17 +606,13 @@ if file1 is not None and file2 is not None:
                     ax_new.set_title("Distribution of Years in SG by New Quartile", fontweight='bold', pad=15)
                     ax_new.set_ylabel("Number of Employees")
                     ax_new.set_xlabel("Years in Subgroup")
-                    
                     ax_new.spines['top'].set_visible(False)
                     ax_new.spines['right'].set_visible(False)
-                    
                     max_y = pivot_df.values.max() if not pivot_df.empty else 1
                     ax_new.set_ylim(0, max_y * 1.15)
-                    
                     plt.xticks(rotation=0)
                     ax_new.legend(title="New Quartile", bbox_to_anchor=(1.05, 1), loc='upper left')
                     fig_new.tight_layout()
-                    
                     st.pyplot(fig_new)
                     plt.close(fig_new)
                 else:
@@ -730,10 +700,6 @@ if file1 is not None and file2 is not None:
                         val_ak = get_num(row.iloc[36])
                         val_al_raw = str(row.iloc[37]).strip().lower()
                         al_vacio = val_al_raw in ['', 'nan', 'nat', 'none', 'null']
-                        
-                        flag_rojo = False
-                        flag_naranja = False
-                        flag_amarillo = False
                         
                         if pd.notna(val_z):
                             delta_dias = abs((FECHA_ACTUAL - val_z).days)
@@ -824,17 +790,15 @@ if file1 is not None and file2 is not None:
                 st.subheader("🎯 Bonus IO Planning")
                 
                 col_rating = None
-                
                 for c in df_filtered.columns:
                     cl = str(c).lower().strip()
                     if 'rating' in cl or 'performance' in cl or 'impact' in cl:
                         if not col_rating: col_rating = c
                         
                 if not col_rating:
-                    col_rating = 'Potential' 
+                    col_rating = 'Potential'
                 
                 col_proposed_io = df_filtered.columns[13] if len(df_filtered.columns) > 13 else None
-                
                 total_ees = len(df_filtered)
                 
                 categories = [
@@ -878,9 +842,8 @@ if file1 is not None and file2 is not None:
                     
                     avg_io = 0
                     if col_proposed_io and not subset.empty:
-                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '', regex=False).str.replace(',', '', regex=False).str.strip()
+                        clean_vals = subset[col_proposed_io].astype(str).str.replace('%', '').str.replace(',', '').str.strip()
                         vals = pd.to_numeric(clean_vals, errors='coerce').dropna()
-                        
                         if not vals.empty:
                             avg_io = vals.mean()
                             if 0 < avg_io <= 10: avg_io = avg_io * 100
@@ -904,10 +867,35 @@ if file1 is not None and file2 is not None:
                 
                 html_rows = ""
                 for d in table_data:
-                    html_rows += f'<tr style="background-color: white;"><td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td><td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td></tr>'
+                    html_rows += "<tr>"
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align:left; color: #333;">{d["label"]}</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["count"]}</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["pct"]:.0f}%</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{d["avg_io"]:.0f}%</td>'
+                    html_rows += f'<td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{d["ref"]}</td>'
+                    html_rows += "</tr>"
                 
-                html_table = f'<div style="max-width: 900px; margin-bottom: 40px;"><table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;"><tr style="background-color: #0F253F; color: white;"><th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th><th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th><th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th><th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th></tr>{html_rows}<tr style="background-color: white;"><td style="padding: 10px; border: none; text-align:left;"></td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td><td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td><td style="padding: 10px; border: none;"></td><td style="padding: 10px; border: none;"></td></tr></table></div>'
-                
+                html_table = f"""
+                <div style="max-width: 900px; margin-bottom: 40px;">
+                <table style="width:100%; text-align:center; border-collapse: collapse; font-family: sans-serif; font-size: 16px;">
+                  <tr style="background-color: #0F253F; color: white;">
+                    <th style="padding: 12px; border: 1px solid #ccc; text-align:left;">Bonus IO Planning</th>
+                    <th style="padding: 12px; border: 1px solid #ccc;"># of EE´s</th>
+                    <th style="padding: 12px; border: 1px solid #ccc;">% of EE´s</th>
+                    <th style="padding: 12px; border: 1px solid #ccc;">Proposed IO %</th>
+                    <th style="padding: 12px; border: 1px solid #ccc;">Average IO %<br>(As reference)</th>
+                  </tr>
+                  {html_rows}
+                  <tr style="background-color: white;">
+                    <td style="padding: 10px; border: none; text-align:left;"></td>
+                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_count}</td>
+                    <td style="padding: 10px; border-top: 2px solid #0F253F; border-bottom: 1px solid #e0e0e0; color: #3b5bdb; font-weight: bold;">{total_pct:.0f}%</td>
+                    <td style="padding: 10px; border: none;"></td>
+                    <td style="padding: 10px; border: none;"></td>
+                  </tr>
+                </table>
+                </div>
+                """
                 st.markdown(html_table, unsafe_allow_html=True)
                 
                 fig_bon, ax_bon = plt.subplots(figsize=(8, 5))
@@ -915,17 +903,14 @@ if file1 is not None and file2 is not None:
                 y_vals = [d['avg_io'] for d in table_data]
                 
                 bars_b = ax_bon.bar(x_labels, y_vals, width=0.5, color='#5a84f1')
-                
                 ax_bon.set_ylim(0, 200)
                 ax_bon.set_yticks([0, 50, 100, 150, 200])
                 
                 def format_fn(tick_val, tick_pos):
-                    if pd.isna(tick_val):
-                        return '0%'
+                    if pd.isna(tick_val): return '0%'
                     return f'{int(tick_val)}%'
                 
                 ax_bon.yaxis.set_major_formatter(plt.FuncFormatter(format_fn))
-                
                 ax_bon.yaxis.grid(True, linestyle='-', which='major', color='lightgrey', alpha=0.7)
                 ax_bon.set_axisbelow(True)
                 
