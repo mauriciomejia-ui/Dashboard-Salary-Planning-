@@ -584,6 +584,12 @@ if file1 is not None and file2 is not None:
                 def evaluar_alertas(row):
                     comentarios = []
                     color = ''
+                    
+                    # BANDERAS MOVIDAS AL INICIO PARA EVITAR UNBOUNDLOCALERROR
+                    flag_rojo = False
+                    flag_naranja = False
+                    flag_amarillo = False
+                    
                     if len(row) > 37:
                         val_j = get_num(row.iloc[9])
                         val_z = get_date(row.iloc[25])
@@ -613,10 +619,10 @@ if file1 is not None and file2 is not None:
                         if val_ai > val_j and val_ak > 0:
                             flag_rojo = True
                             comentarios.append("AI supera el valor de J y AK > 0")
-                        
-                        if flag_rojo: color = '#ffcccc'
-                        elif flag_naranja: color = '#ffe4b5'
-                        elif flag_amarillo: color = '#ffffcc'
+                            
+                    if flag_rojo: color = '#ffcccc'
+                    elif flag_naranja: color = '#ffe4b5'
+                    elif flag_amarillo: color = '#ffffcc'
                         
                     return [" | ".join(comentarios), color]
 
@@ -654,9 +660,7 @@ if file1 is not None and file2 is not None:
                         cols_to_drop = ['RowColor', 'Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                         df_visual = df_detalle.drop(columns=[c for c in cols_to_drop if c in df_detalle.columns])
                         
-                        # --- FIX: FORZAR STRING EN TODO EL DATAFRAME VISUAL PARA EVITAR PYARROW CRASH ---
                         df_visual = df_visual.astype(str)
-                        
                         colores_array = df_detalle['RowColor'].values
                         cols_fijas = list(df_visual.columns[:4])
                         df_visual = df_visual.set_index(cols_fijas)
@@ -851,7 +855,6 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    # FIX: FORZAR STRING PARA EVITAR PYARROW CRASH
                     st.dataframe(df_bonus_table[cols_to_show].astype(str), use_container_width=True)
                 
                 bon_summary_df = pd.DataFrame(table_data)
@@ -1040,9 +1043,7 @@ if file1 is not None and file2 is not None:
                             cols_to_drop_eq = ['Date_in_SG_clean', 'Years_Raw', 'Current Quartile', 'New Quartile']
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
-                            # FIX: FORZAR STRING EN TODO EL DATAFRAME VISUAL PARA EVITAR PYARROW CRASH
                             df_visual_eq = df_visual_eq.astype(str)
-                            
                             cols_fijas_eq = list(df_visual_eq.columns[:4])
                             df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
@@ -1137,7 +1138,7 @@ if file1 is not None and file2 is not None:
                 data=excel_data,
                 file_name="Dashboard_Final_Report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_btn"
+                key="dl_btn_final"
             )
 
     except Exception as e:
