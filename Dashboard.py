@@ -7,8 +7,13 @@ import json
 import os
 import numpy as np
 import io
+import PIL.Image
 
-# ¡Esta línea debe ser la primera!
+# --- FIX PARA IMÁGENES FANTASMAS EN EXCEL ---
+# Desactiva el límite de píxeles para que archivos con artefactos o formas invisibles gigantes no rompan la app
+PIL.Image.MAX_IMAGE_PIXELS = None
+
+# ¡Esta línea debe ser la primera de Streamlit!
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
 
 st.title("Salary Planning Dashboard")
@@ -319,7 +324,9 @@ if file1 is not None and file2 is not None:
                     grp['Status'] = np.where(grp['Variance'] > 0, 'Over Budget', 'On/Under Budget')
                     grp['% Incr'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
                     grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget', 'Variance', 'Status', '% Incr']]
-                    grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adj Cost', 'Promo_Cost': 'Promo Cost'}, inplace=True)
+                    
+                    # Corrección del Warning de pandas
+                    grp = grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adj Cost', 'Promo_Cost': 'Promo Cost'})
                     return grp
                 
                 def color_salary_variance(row):
@@ -585,7 +592,6 @@ if file1 is not None and file2 is not None:
                     comentarios = []
                     color = ''
                     
-                    # BANDERAS MOVIDAS AL INICIO PARA EVITAR UNBOUNDLOCALERROR
                     flag_rojo = False
                     flag_naranja = False
                     flag_amarillo = False
