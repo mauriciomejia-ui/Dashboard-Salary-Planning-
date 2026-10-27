@@ -7,13 +7,8 @@ import json
 import os
 import numpy as np
 import io
-import PIL.Image
 
-# --- FIX PARA IMÁGENES FANTASMAS EN EXCEL ---
-# Desactiva el límite de píxeles para que archivos con artefactos o formas invisibles gigantes no rompan la app
-PIL.Image.MAX_IMAGE_PIXELS = None
-
-# ¡Esta línea debe ser la primera de Streamlit!
+# ¡Esta línea debe ser la primera!
 st.set_page_config(page_title="Salary Planning Dashboard", layout="wide")
 
 st.title("Salary Planning Dashboard")
@@ -63,8 +58,9 @@ with col_up2:
 
 if file1 is not None and file2 is not None:
     try:
-        df1 = pd.read_excel(file1, sheet_name="Salary")
-        df2 = pd.read_excel(file2, header=2)
+        # --- LECTURA ESTRICTA (IGNORA IMÁGENES CORRUPTAS) ---
+        df1 = pd.read_excel(file1, sheet_name="Salary", engine="openpyxl", engine_kwargs={"read_only": True})
+        df2 = pd.read_excel(file2, header=2, engine="openpyxl", engine_kwargs={"read_only": True})
         
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
@@ -324,8 +320,6 @@ if file1 is not None and file2 is not None:
                     grp['Status'] = np.where(grp['Variance'] > 0, 'Over Budget', 'On/Under Budget')
                     grp['% Incr'] = np.where(grp['Total_Salary'] > 0, ((grp['New_Salary'] / grp['Total_Salary']) - 1) * 100, 0)
                     grp = grp[['Group', 'Adj_Cost', 'Promo_Cost', 'Total Cost', 'Budget', 'Variance', 'Status', '% Incr']]
-                    
-                    # Corrección del Warning de pandas
                     grp = grp.rename(columns={'Group': col_name, 'Adj_Cost': 'Adj Cost', 'Promo_Cost': 'Promo Cost'})
                     return grp
                 
