@@ -74,27 +74,33 @@ if file1 is not None and file2 is not None:
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
         # Evitar duplicados de ID en SuperFlex para no corromper el cruce
-        df2_sub = df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']].drop_duplicates(subset=['Global ID'])
-        
-        if len(df2.columns) > 28:
-            df2_sub['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
+        cols_df2 = [c for c in ['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender'] if c in df2.columns]
+        if 'Global ID' in df2.columns:
+            df2_sub = df2[cols_df2].drop_duplicates(subset=['Global ID'])
+            if len(df2.columns) > 28 and 'Employee Subgroup' not in df2_sub.columns:
+                df2_sub['Employee Subgroup'] = df2.iloc[:, 28].astype(str)
+            elif 'Employee Subgroup' not in df2_sub.columns:
+                df2_sub['Employee Subgroup'] = "N/A"
+                
+            if len(df2.columns) > 47 and 'Gender' not in df2_sub.columns:
+                df2_sub['Gender'] = df2.iloc[:, 47].astype(str)
+            elif 'Gender' not in df2_sub.columns:
+                df2_sub['Gender'] = "Unknown"
+                
+            df = pd.merge(df1, df2_sub, on='Global ID', how='left')
         else:
-            df2_sub['Employee Subgroup'] = "N/A"
-            
-        if len(df2.columns) > 47:
-            df2_sub['Gender'] = df2.iloc[:, 47].astype(str)
-        else:
-            df2_sub['Gender'] = "Unknown"
-        
-        df = pd.merge(df1, df2_sub, on='Global ID', how='left')
+            df = df1.copy()
         
         # Reasegurar nombres de columnas tras el merge
         df.columns = df.columns.astype(str)
         
         # --- FIX PANDAS: LIMPIEZA GLOBAL DE TEXTOS PARA EVITAR CRASH DE ORDENAMIENTO ---
-        df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
-        df['Employee Subgroup'] = df['Employee Subgroup'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
-        df['Gender'] = df['Gender'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        if 'Chief Name' in df.columns:
+            df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
+        if 'Employee Subgroup' in df.columns:
+            df['Employee Subgroup'] = df['Employee Subgroup'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
+        if 'Gender' in df.columns:
+            df['Gender'] = df['Gender'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
         
         if 'Potential' in df.columns:
             df['Potential'] = df['Potential'].astype(str).replace(['nan', 'NaN', 'None Selected', 'None', '<NA>'], 'Not Assigned')
@@ -120,12 +126,12 @@ if file1 is not None and file2 is not None:
         
         def_gerentes, def_orgs, def_funcs, def_comps, def_subgroups, def_potentials = [], [], [], [], [], []
         
-        gerente_options = sorted(df['Chief Name'].unique().tolist())
-        org_options = sorted(df['Reporting Organization'].unique().tolist()) if 'Reporting Organization' in df.columns else []
-        func_options = sorted(df['Function'].unique().tolist()) if 'Function' in df.columns else []
-        comp_options = sorted(df['Compensation Area'].unique().tolist()) if 'Compensation Area' in df.columns else []
-        subgroup_options = sorted(df['Employee Subgroup'].unique().tolist())
-        potential_options = sorted(df['Potential'].unique().tolist())
+        gerente_options = sorted(df['Chief Name'].astype(str).unique().tolist()) if 'Chief Name' in df.columns else []
+        org_options = sorted(df['Reporting Organization'].astype(str).unique().tolist()) if 'Reporting Organization' in df.columns else []
+        func_options = sorted(df['Function'].astype(str).unique().tolist()) if 'Function' in df.columns else []
+        comp_options = sorted(df['Compensation Area'].astype(str).unique().tolist()) if 'Compensation Area' in df.columns else []
+        subgroup_options = sorted(df['Employee Subgroup'].astype(str).unique().tolist()) if 'Employee Subgroup' in df.columns else []
+        potential_options = sorted(df['Potential'].astype(str).unique().tolist()) if 'Potential' in df.columns else []
 
         if filtro_elegido != "-- None --":
             config = st.session_state['memoria_filtros'][filtro_elegido]
@@ -187,14 +193,15 @@ if file1 is not None and file2 is not None:
         filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
         filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
-        df_filtered = df[
-            (df['Chief Name'].isin(filtros_finales_gerentes)) &
-            (df['Reporting Organization'].isin(filtros_finales_orgs)) &
-            (df['Function'].isin(filtros_finales_funcs)) &
-            (df['Compensation Area'].isin(filtros_finales_comps)) &
-            (df['Employee Subgroup'].isin(filtros_finales_subgroups)) &
-            (df['Potential'].isin(filtros_finales_potentials))
-        ].copy()
+        mask_all = pd.Series(True, index=df.index)
+        if 'Chief Name' in df.columns: mask_all = mask_all & (df['Chief Name'].isin(filtros_finales_gerentes))
+        if 'Reporting Organization' in df.columns: mask_all = mask_all & (df['Reporting Organization'].isin(filtros_finales_orgs))
+        if 'Function' in df.columns: mask_all = mask_all & (df['Function'].isin(filtros_finales_funcs))
+        if 'Compensation Area' in df.columns: mask_all = mask_all & (df['Compensation Area'].isin(filtros_finales_comps))
+        if 'Employee Subgroup' in df.columns: mask_all = mask_all & (df['Employee Subgroup'].isin(filtros_finales_subgroups))
+        if 'Potential' in df.columns: mask_all = mask_all & (df['Potential'].isin(filtros_finales_potentials))
+
+        df_filtered = df[mask_all].copy()
         
         st.success(f"Showing {len(df_filtered)} records matching your sidebar search.")
         
@@ -364,13 +371,12 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        # Eliminamos el parámetro de contenedor para evitar quejas del log
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1))
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
 
                 st.markdown("---")
 
@@ -607,7 +613,8 @@ if file1 is not None and file2 is not None:
                 else: mask = pd.Series(True, index=df_filtered.index)
                     
                 df_detalle = df_filtered[mask].copy()
-                df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
+                if 'Chief Name' in df_detalle.columns:
+                    df_detalle = df_detalle.rename(columns={'Chief Name': 'Manager'})
                 
                 if selected_years: df_detalle = df_detalle[df_detalle['Years in SG'].isin(selected_years)]
                 if selected_qrtle: df_detalle = df_detalle[df_detalle['New Quartile'].isin(selected_qrtle)]
@@ -700,7 +707,7 @@ if file1 is not None and file2 is not None:
                             return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado)
+                        st.dataframe(df_estilizado, width='stretch')
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -885,8 +892,8 @@ if file1 is not None and file2 is not None:
                         
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
-                    df_bonus_show = df_bonus_table[cols_to_show].astype(str).reset_index(drop=True)
-                    st.dataframe(df_bonus_show)
+                    df_bonus_show = df_bonus_table[cols_to_show].astype(str).replace(['nan', 'NaN', 'NaT', '<NA>'], '').reset_index(drop=True)
+                    st.dataframe(df_bonus_show, width='stretch')
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -909,7 +916,8 @@ if file1 is not None and file2 is not None:
                     df_equity_full = df_filtered[mask_stock].copy()
                     
                     if not df_equity_full.empty:
-                        df_equity_full = df_equity_full.rename(columns={'Chief Name': 'Manager'})
+                        if 'Chief Name' in df_equity_full.columns:
+                            df_equity_full = df_equity_full.rename(columns={'Chief Name': 'Manager'})
                         
                         val_bn_full = pd.to_numeric(df_equity_full.iloc[:, col_bn_idx], errors='coerce').fillna(0)
                         val_bl_full = pd.to_numeric(df_equity_full.iloc[:, col_bl_idx], errors='coerce').fillna(0)
@@ -990,7 +998,7 @@ if file1 is not None and file2 is not None:
                         
                         def build_equity_breakdown(df_base, col_name):
                             df_temp = pd.DataFrame({
-                                'Group': df_base[col_name].astype(str),
+                                'Group': df_base[col_name].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown'),
                                 'Budget': pd.to_numeric(df_base.iloc[:, col_bl_idx], errors='coerce').fillna(0),
                                 'Proposed': df_base['Proposed Recommendation Value']
                             })
@@ -1011,13 +1019,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1))
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1089,7 +1097,7 @@ if file1 is not None and file2 is not None:
                                 return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled)
+                            st.dataframe(df_eq_styled, width='stretch')
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
