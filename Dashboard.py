@@ -66,6 +66,10 @@ if file1 is not None and file2 is not None:
         df1 = pd.read_excel(file1, sheet_name="Salary", engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         df2 = pd.read_excel(file2, header=2, engine="openpyxl", engine_kwargs={"read_only": True, "data_only": True})
         
+        # BLINDAJE 1: Convertir todas las cabeceras a texto para evitar colapso de PyArrow
+        df1.columns = df1.columns.astype(str)
+        df2.columns = df2.columns.astype(str)
+        
         df1['Global ID'] = pd.to_numeric(df1['Global ID'], errors='coerce')
         df2['Global ID'] = pd.to_numeric(df2['Global ID'], errors='coerce')
         
@@ -81,7 +85,10 @@ if file1 is not None and file2 is not None:
         
         df = pd.merge(df1, df2[['Global ID', 'Chief Name', 'Employee Subgroup', 'Gender']], on='Global ID', how='left')
         
-        # --- FIX PANDAS 3.1.0: LIMPIEZA GLOBAL DE TEXTOS PARA EVITAR CRASH DE ORDENAMIENTO ---
+        # Reasegurar nombres de columnas tras el merge
+        df.columns = df.columns.astype(str)
+        
+        # --- FIX PANDAS: LIMPIEZA GLOBAL DE TEXTOS PARA EVITAR CRASH DE ORDENAMIENTO ---
         df['Chief Name'] = df['Chief Name'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "No Manager Assigned")
         df['Employee Subgroup'] = df['Employee Subgroup'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
         df['Gender'] = df['Gender'].astype(str).replace(['nan', 'NaN', 'None', '<NA>'], 'Unknown')
@@ -177,7 +184,6 @@ if file1 is not None and file2 is not None:
         filtros_finales_subgroups = selected_subgroups if selected_subgroups else subgroup_options
         filtros_finales_potentials = selected_potentials if selected_potentials else potential_options
 
-        # El dataframe ya viene casteado a string en sus columnas clave, previniendo choques
         df_filtered = df[
             (df['Chief Name'].isin(filtros_finales_gerentes)) &
             (df['Reporting Organization'].isin(filtros_finales_orgs)) &
@@ -290,6 +296,12 @@ if file1 is not None and file2 is not None:
                     status_html = f"<span style='color: green; font-weight: bold;'>${variance:,.2f} (On/Under Budget)</span>"
                 else:
                     status_html = f"<span style='color: red; font-weight: bold;'>+${variance:,.2f} (Over Budget)</span>"
+
+                cost_df = pd.DataFrame({
+                    "Concept": ["Adjustment Cost", "Growth Promotion Cost", "Total Cost", "Total Budget Amount", "Total % Increment"],
+                    "Value": [f"${cost_adj:,.2f}", f"${cost_promo:,.2f}", f"${total_cost:,.2f}", f"${budget_amount:,.2f}", f"{pct_incremento:,.2f}%"],
+                    "% of Total Salary": [f"{pct_adj_vs_total:,.2f}%", f"{pct_promo_vs_total:,.2f}%", f"{pct_total_cost_vs_total:,.2f}%", f"{budget_pct:,.2f}%", "-"]
+                })
                 
                 summary_html = (
                     "<table style='width:100%; text-align:left; border-collapse: collapse; margin-bottom: 25px; font-size: 15px;'>"
@@ -349,12 +361,12 @@ if file1 is not None and file2 is not None:
                     st.markdown("**By Reporting Organization**")
                     if 'Reporting Organization' in df_filtered.columns:
                         df_breakdown_org = build_cost_breakdown(df_filtered, 'Reporting Organization', budget_pct)
-                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_org.style.format(format_dict).apply(color_salary_variance, axis=1))
                 with col_brk_2:
                     st.markdown("**By Function**")
                     if 'Function' in df_filtered.columns:
                         df_breakdown_func = build_cost_breakdown(df_filtered, 'Function', budget_pct)
-                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1), width='stretch')
+                        st.dataframe(df_breakdown_func.style.format(format_dict).apply(color_salary_variance, axis=1))
 
                 st.markdown("---")
 
@@ -676,14 +688,16 @@ if file1 is not None and file2 is not None:
                         
                         df_visual = df_visual.astype(str).reset_index(drop=True)
                         colores_array = df_detalle['RowColor'].values
+                        cols_fijas = list(df_visual.columns[:4])
+                        df_visual = df_visual.set_index(cols_fijas)
                         
                         def aplicar_colores(df_vista):
                             estilos = [f"background-color: {c}" if c else "" for c in colores_array]
                             style_dict = {col: estilos for col in df_vista.columns}
-                            return pd.DataFrame(style_dict, index=df_vista.index)
+                            return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                         
                         df_estilizado = df_visual.style.apply(aplicar_colores, axis=None)
-                        st.dataframe(df_estilizado, width='stretch')
+                        st.dataframe(df_estilizado)
                     else:
                         st.info("No employees match your search term or filters.")
                 else:
@@ -869,7 +883,7 @@ if file1 is not None and file2 is not None:
                 st.write(f"Showing **{len(df_bonus_table)}** employees based on your criteria.")
                 if not df_bonus_table.empty and cols_to_show:
                     df_bonus_show = df_bonus_table[cols_to_show].astype(str).reset_index(drop=True)
-                    st.dataframe(df_bonus_show, width='stretch')
+                    st.dataframe(df_bonus_show)
                 
                 bon_summary_df = pd.DataFrame(table_data)
                 return bon_summary_df, pd.DataFrame(), pd.DataFrame(), df_bonus_table
@@ -994,13 +1008,13 @@ if file1 is not None and file2 is not None:
                             st.markdown("**By Reporting Organization**")
                             if 'Reporting Organization' in df_filtered.columns:
                                 df_brk_org = build_equity_breakdown(df_equity_full, 'Reporting Organization')
-                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_org.style.format(format_dict_eq).apply(color_variance_row, axis=1))
                                 
                         with col_eq_brk2:
                             st.markdown("**By Function**")
                             if 'Function' in df_filtered.columns:
                                 df_brk_func = build_equity_breakdown(df_equity_full, 'Function')
-                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1), width='stretch')
+                                st.dataframe(df_brk_func.style.format(format_dict_eq).apply(color_variance_row, axis=1))
                                 
                         st.markdown("---")
                         st.markdown("### 👥 Eligible Employees List")
@@ -1060,6 +1074,8 @@ if file1 is not None and file2 is not None:
                             df_visual_eq = df_equity_filtered.drop(columns=[c for c in cols_to_drop_eq if c in df_equity_filtered.columns])
                             
                             df_visual_eq = df_visual_eq.astype(str).reset_index(drop=True)
+                            cols_fijas_eq = list(df_visual_eq.columns[:4])
+                            df_visual_eq = df_visual_eq.set_index(cols_fijas_eq)
                             
                             def color_equity_totales(df_vista):
                                 estilos = []
@@ -1068,10 +1084,10 @@ if file1 is not None and file2 is not None:
                                     elif cat == "Above Midpoint": estilos.append('background-color: #ffffcc')
                                     else: estilos.append('')
                                 style_dict = {col: estilos for col in df_vista.columns}
-                                return pd.DataFrame(style_dict, index=df_vista.index)
+                                return pd.DataFrame(style_dict, index=df_vista.index, columns=df_vista.columns)
                             
                             df_eq_styled = df_visual_eq.style.apply(color_equity_totales, axis=None)
-                            st.dataframe(df_eq_styled, width='stretch')
+                            st.dataframe(df_eq_styled)
                         else:
                             if seleccion_conceptos: st.info("No employees match your search term in the selected categories.")
                             else: st.info("Select one or more categories above to view employee details in this table.")
